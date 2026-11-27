@@ -27,6 +27,14 @@ pip install -e ".[dev]"
 cp .env.example .env
 alembic upgrade head
 uvicorn app.main:app --reload
+```
+
+## Tests
+
+```bash
+# DB-backed tests need a throwaway database; they are skipped when this is unset.
+createdb -h localhost -U hub agent_hub_test
+export TEST_DATABASE_URL=postgresql+asyncpg://hub:hub@localhost:5432/agent_hub_test
 pytest
 ```
 
@@ -51,7 +59,6 @@ frontend/               React + TypeScript dashboard (Phase 3)
 
 ## Status
 
-The `/api/v1` endpoints are wired but return `501 Not Implemented` until the
-registry, models and orchestrator land.
+Endpoints that are not built yet return `501 Not Implemented`.
 
 Secrets (API keys) come from environment variables only; never store them in agent config rows.
