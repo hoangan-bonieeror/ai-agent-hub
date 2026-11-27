@@ -3,16 +3,20 @@
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1._stub import not_implemented
 from app.core.database import get_session
+from app.orchestrator import AgentOrchestrator, AgentUnavailableError
+from app.orchestrator.dependencies import get_runtime_registry
+from app.registry.agent_registry import AgentRegistry
 from app.repositories.agent_repository import (
     AgentConflictError,
     AgentNotFoundError,
     AgentRepository,
     to_read_dict,
 )
+from app.runtimes import RuntimeNotFoundError, RuntimeRegistry
 from app.schemas.agent import (
     AgentCreate,
     AgentList,
@@ -140,6 +144,27 @@ async def get_agent_version(agent_id: str, version: int, session: SessionDep):
         raise _not_found(exc) from exc
 
 
+class AgentRunRequest(BaseModel):
+    task: str = Field(min_length=1, max_length=50_000, description="What the agent should do.")
+    input: dict[str, Any] = Field(default_factory=dict, description="Extra context data.")
+
+
 @router.post("/{agent_id}/run")
-async def run_agent(agent_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    raise not_implemented("Run agent")
+async def run_agent(
+    agent_id: str,
+    body: AgentRunRequest,
+    session: SessionDep,
+    runtimes: Annotated[RuntimeRegistry, Depends(get_runtime_registry)],
+) -> dict[str, Any]:
+    """Runs one agent directly and waits for its result. Agent failures
+    (timeout, step limit, model error) return 200 with a non-completed status."""
+    orchestrator = AgentOrchestrator(AgentRegistry(session), runtimes)
+    try:
+        result = await orchestrator.execute_task(agent_id, {"task": body.task, **body.input})
+    except AgentNotFoundError as exc:
+        raise _not_found(exc) from exc
+    except AgentUnavailableError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except RuntimeNotFoundError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return result.model_dump(mode="json")

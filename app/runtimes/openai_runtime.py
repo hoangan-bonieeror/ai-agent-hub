@@ -1,0 +1,133 @@
+"""Runtime adapter for the OpenAI Agents SDK (``openai-agents``)."""
+
+from __future__ import annotations
+
+import asyncio
+import time
+from collections.abc import Callable
+from typing import Any
+
+from agents import Agent, ModelProvider, RunConfig, Runner, Tool, WebSearchTool
+from agents.exceptions import AgentsException, MaxTurnsExceeded
+
+from app.runtimes.base import AgentConfig, AgentResult, AgentResultStatus, AgentRuntime, TokenUsage
+from app.runtimes.prompting import render_task_input
+
+ToolFactory = Callable[[], Tool]
+
+DEFAULT_TOOL_FACTORIES: dict[str, ToolFactory] = {
+    "web_search": WebSearchTool,
+}
+
+
+class UnknownToolError(LookupError):
+    pass
+
+
+class OpenAIAgentRuntime(AgentRuntime):
+    """Runs an :class:`AgentConfig` with the OpenAI Agents SDK.
+
+    * ``limits.max_steps`` maps to the SDK's ``max_turns``.
+    * ``limits.timeout_seconds`` is enforced with ``asyncio.wait_for``.
+    * Tools are resolved by name from ``tool_factories``. A tool name with no
+      factory fails the run (deny by default) rather than being skipped.
+    * ``model_provider`` lets callers route to another provider or a fake
+      model in tests; by default the SDK reads ``OPENAI_API_KEY`` from env.
+    """
+
+    name = "openai_agents"
+
+    def __init__(
+        self,
+        *,
+        default_model: str | None = None,
+        tool_factories: dict[str, ToolFactory] | None = None,
+        model_provider: ModelProvider | None = None,
+        tracing_disabled: bool = False,
+    ) -> None:
+        self.default_model = default_model
+        self.tool_factories = dict(
+            DEFAULT_TOOL_FACTORIES if tool_factories is None else tool_factories
+        )
+        self.model_provider = model_provider
+        self.tracing_disabled = tracing_disabled
+
+    def build_agent(self, config: AgentConfig) -> Agent:
+        tools: list[Tool] = []
+        for tool_name in config.tools:
+            factory = self.tool_factories.get(tool_name)
+            if factory is None:
+                raise UnknownToolError(
+                    f"Agent '{config.id}' requests tool '{tool_name}', which is not registered"
+                )
+            tools.append(factory())
+        return Agent(
+            name=config.name,
+            instructions=config.instructions,
+            model=config.model or self.default_model,
+            tools=tools,
+        )
+
+    def _run_config(self, config: AgentConfig) -> RunConfig:
+        kwargs: dict[str, Any] = {
+            "workflow_name": f"agent-hub:{config.id}",
+            "tracing_disabled": self.tracing_disabled,
+        }
+        if self.model_provider is not None:
+            kwargs["model_provider"] = self.model_provider
+        return RunConfig(**kwargs)
+
+    async def execute(self, agent_config: AgentConfig, task_input: dict[str, Any]) -> AgentResult:
+        started = time.monotonic()
+
+        def result(status: AgentResultStatus, **kw: Any) -> AgentResult:
+            return AgentResult(
+                agent_id=agent_config.id,
+                runtime=self.name,
+                status=status,
+                duration_ms=int((time.monotonic() - started) * 1000),
+                **kw,
+            )
+
+        try:
+            agent = self.build_agent(agent_config)
+        except UnknownToolError as exc:
+            return result(AgentResultStatus.FAILED, error=str(exc))
+
+        try:
+            run = await asyncio.wait_for(
+                Runner.run(
+                    agent,
+                    render_task_input(task_input),
+                    max_turns=agent_config.limits.max_steps,
+                    run_config=self._run_config(agent_config),
+                ),
+                timeout=agent_config.limits.timeout_seconds,
+            )
+        except TimeoutError:
+            return result(
+                AgentResultStatus.TIMED_OUT,
+                error=f"Timed out after {agent_config.limits.timeout_seconds}s",
+            )
+        except MaxTurnsExceeded as exc:
+            return result(AgentResultStatus.STEP_LIMIT_EXCEEDED, error=str(exc))
+        except AgentsException as exc:
+            return result(AgentResultStatus.FAILED, error=f"{type(exc).__name__}: {exc}")
+        except Exception as exc:  # provider/network errors from the OpenAI client
+            return result(AgentResultStatus.FAILED, error=f"{type(exc).__name__}: {exc}")
+
+        sdk_usage = run.context_wrapper.usage
+        output = run.final_output
+        if hasattr(output, "model_dump"):
+            output = output.model_dump()
+        return result(
+            AgentResultStatus.COMPLETED,
+            output=output,
+            usage=TokenUsage(
+                requests=sdk_usage.requests,
+                input_tokens=sdk_usage.input_tokens,
+                output_tokens=sdk_usage.output_tokens,
+                total_tokens=sdk_usage.total_tokens,
+            ),
+            metadata={"last_agent": run.last_agent.name, "last_response_id": run.last_response_id},
+        )
