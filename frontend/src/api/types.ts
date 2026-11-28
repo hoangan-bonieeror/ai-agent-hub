@@ -362,3 +362,37 @@ export interface AuditEntry {
   timestamp: string;
   metadata: Record<string, unknown>;
 }
+
+export interface NetworkNode {
+  id: string;
+  name: string;
+  status: string;
+  runtime: string;
+  model: string;
+  tools: number;
+  memories: number;
+  /** Runs in the window this agent took part in. */
+  runs: number;
+  tasks: number;
+  failed: number;
+  /** Steps running or queued right now. */
+  running: number;
+  last_status: string | null;
+  last_active_at: string | null;
+}
+
+export interface NetworkLink {
+  source: string;
+  target: string;
+  /** Runs both agents took part in. */
+  runs: number;
+  /** Times each agent handed work to the other (keyed by the sender). */
+  handoffs: Record<string, number>;
+}
+
+export interface AgentNetwork {
+  days: number;
+  runs: number;
+  nodes: NetworkNode[];
+  links: NetworkLink[];
+}

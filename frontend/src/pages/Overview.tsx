@@ -1,5 +1,6 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
+import { NetworkGraph } from "../components/NetworkGraph";
 import { RunsTable } from "../components/RunsTable";
 import { Card, Empty, ErrorBox, Loading, PageHeader, Stat } from "../components/ui";
 import { useApi } from "../hooks/useApi";
@@ -11,6 +12,8 @@ export function OverviewPage() {
   const runs = useApi(() => api.listRuns({ limit: 50 }), [], 5000);
   const costs = useApi(() => api.costs({ days: 30 }), [], 30000);
   const policies = useApi(() => api.listPolicies(), [], 30000);
+  const network = useApi(() => api.network(30), [], 5000);
+  const navigate = useNavigate();
 
   const runItems = runs.data?.items ?? [];
   const active = runItems.filter((r) => r.status === "running" || r.status === "pending").length;
@@ -55,6 +58,12 @@ export function OverviewPage() {
         <div className="notice notice-warn">
           Budget reached: {reachedBudgets.map((p) => p.name).join(", ")}. See <Link to="/policies">Policies</Link>.
         </div>
+      )}
+
+      {network.data && network.data.nodes.length > 0 && (
+        <Card title="Agent network" actions={<Link to="/network">Open network →</Link>} className="net-card">
+          <NetworkGraph data={network.data} height={340} compact onSelect={(id) => navigate(`/agents/${id}`)} />
+        </Card>
       )}
 
       {firstUse && (

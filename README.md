@@ -69,7 +69,8 @@ A React + TypeScript app in `frontend/`. It needs [Node.js 22 LTS](https://nodej
 
 | Page | What you can do |
 | --- | --- |
-| Overview | Counts, success rate, runs in progress and the latest runs. |
+| Overview | Counts, success rate, a live view of the agent network, and the latest runs. |
+| Network | Agents as neurons around the hub. Agents that ran in the same workflow runs are wired together (thicker, brighter wires for more shared runs), signals travel along the wires, working agents glow and send steady signals, agents whose last step failed glow red, and small sparks show their memories. Hover for details, click to open the agent. Data comes from `GET /api/v1/network?days=30`. |
 | Agents | List, search and filter agents; create and edit them (each change is a new version); see every version; enable, disable or archive; try an agent with a one-off task. |
 | Workflows | See each workflow as a graph; run it with JSON input; switch between versions. |
 | Workflow builder | Add agent, review and aggregate steps, connect them with "runs after", and watch the graph update. Mistakes (cycles, missing agents, unknown steps) are flagged before saving. A JSON tab edits the raw definition. Editing a workflow saves a new version. |
@@ -77,7 +78,7 @@ A React + TypeScript app in `frontend/`. It needs [Node.js 22 LTS](https://nodej
 | Memory | Search, add, edit and delete the notes agents keep between runs. |
 | Costs | Spend per day and by agent, model and workflow; model prices. |
 | Policies | Budgets with what is spent so far, blocked tools, allowed models, a dry-run check and recent changes. |
-| Runs | Filter by workflow and status. A run's page follows it live over SSE: each step's status on the graph, outputs, attempts, token usage, execution logs, the event log, and a Cancel button. |
+| Runs | Filter by workflow and status. A run's page follows it live over SSE: each step's status on the graph (signals travel along the wires into running steps; failed steps glow red), outputs, attempts, token usage, execution logs, the event log, and a Cancel button. |
 
 **One URL (after a build).** Build once, and `uvicorn` serves the dashboard at
 http://localhost:8000 next to the API:
@@ -99,6 +100,8 @@ npm run dev          # http://localhost:5173
 ```
 
 Set `$env:HUB_API_URL = "http://localhost:9000"` first if the API is on another port.
+The dashboard uses the dark "neural" look by default; "Light theme" at the bottom of the
+sidebar switches to a light one (remembered per browser).
 `npm test` runs the dashboard's unit tests and `npm run typecheck` the TypeScript checks.
 
 The dashboard sends `X-Actor: dashboard` with its requests, so agent versions and runs it

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import { api } from "./api/client";
 import { useApi } from "./hooks/useApi";
@@ -6,6 +7,7 @@ import { AgentFormPage } from "./pages/AgentForm";
 import { AgentsPage } from "./pages/Agents";
 import { CostsPage } from "./pages/Costs";
 import { MemoryPage } from "./pages/Memory";
+import { NetworkPage } from "./pages/Network";
 import { NotFoundPage } from "./pages/NotFound";
 import { OverviewPage } from "./pages/Overview";
 import { PoliciesPage } from "./pages/Policies";
@@ -18,6 +20,7 @@ import { WorkflowsPage } from "./pages/Workflows";
 
 const NAV = [
   { to: "/", label: "Overview", end: true },
+  { to: "/network", label: "Network" },
   { to: "/agents", label: "Agents" },
   { to: "/workflows", label: "Workflows" },
   { to: "/runs", label: "Runs" },
@@ -44,6 +47,7 @@ export function App() {
         </nav>
         <div className="sidebar-foot">
           <ServerStatus />
+          <ThemeToggle />
           <a href="/docs" target="_blank" rel="noreferrer">
             API docs ↗
           </a>
@@ -52,6 +56,7 @@ export function App() {
       <main className="content">
         <Routes>
           <Route path="/" element={<OverviewPage />} />
+          <Route path="/network" element={<NetworkPage />} />
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/agents/new" element={<AgentFormPage />} />
           <Route path="/agents/:id" element={<AgentDetailPage />} />
@@ -82,5 +87,33 @@ function ServerStatus() {
       <span className={`dot ${error ? "bad" : ok ? "good" : data ? "warn" : ""}`} />
       <span>{label}</span>
     </div>
+  );
+}
+
+type Theme = "neural" | "light";
+
+function readTheme(): Theme {
+  try {
+    return localStorage.getItem("hub-theme") === "light" ? "light" : "neural";
+  } catch {
+    return "neural";
+  }
+}
+
+/** The neural (dark navy) look is the default; a light theme stays available. */
+function ThemeToggle() {
+  const [theme, setTheme] = useState<Theme>(readTheme);
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem("hub-theme", theme);
+    } catch {
+      // private mode: the choice just isn't remembered
+    }
+  }, [theme]);
+  return (
+    <button className="link-btn theme-toggle" onClick={() => setTheme(theme === "neural" ? "light" : "neural")}>
+      {theme === "neural" ? "Light theme" : "Neural theme"}
+    </button>
   );
 }
