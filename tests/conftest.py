@@ -25,7 +25,10 @@ from sqlalchemy import text  # noqa: E402
 from app.core.database import get_sessionmaker, reset_engine  # noqa: E402
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
-_TABLES = "audit_logs, executions, tasks, workflow_runs, workflows, agent_versions, agents, tools"
+_TABLES = (
+    "audit_logs, executions, tasks, workflow_runs, workflows, agent_versions, agents, tools, "
+    "mcp_servers"
+)
 
 
 @pytest.fixture(scope="session")

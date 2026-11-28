@@ -4,8 +4,11 @@ import type {
   AgentResult,
   AgentVersion,
   Execution,
+  McpServerInput,
+  McpServerRow,
   Page,
   Readiness,
+  RegistryTool,
   RunDetail,
   RunSummary,
   Workflow,
@@ -115,6 +118,18 @@ export const api = {
   getRun: (id: string) => request<RunDetail>(`runs/${encodeURIComponent(id)}`),
   cancelRun: (id: string) => request<unknown>(`runs/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
   getExecution: (id: string) => request<Execution>(`executions/${encodeURIComponent(id)}`),
+
+  listTools: () => request<{ items: RegistryTool[] }>("tools"),
+  listMcpServers: () => request<{ items: McpServerRow[] }>("mcp-servers"),
+  getMcpServer: (name: string) => request<McpServerRow>(`mcp-servers/${encodeURIComponent(name)}`),
+  createMcpServer: (body: McpServerInput) =>
+    request<McpServerRow>("mcp-servers", { method: "POST", body: json(body) }),
+  updateMcpServer: (name: string, body: McpServerInput) =>
+    request<McpServerRow>(`mcp-servers/${encodeURIComponent(name)}`, { method: "PATCH", body: json(body) }),
+  deleteMcpServer: (name: string) =>
+    request<void>(`mcp-servers/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  discoverMcpServer: (name: string) =>
+    request<McpServerRow>(`mcp-servers/${encodeURIComponent(name)}/discover`, { method: "POST" }),
 };
 
 export const runEventsUrl = (runId: string) => `${BASE}/runs/${encodeURIComponent(runId)}/events`;

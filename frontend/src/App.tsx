@@ -8,6 +8,7 @@ import { NotFoundPage } from "./pages/NotFound";
 import { OverviewPage } from "./pages/Overview";
 import { RunDetailPage } from "./pages/RunDetail";
 import { RunsPage } from "./pages/Runs";
+import { ToolsPage } from "./pages/Tools";
 import { WorkflowBuilderPage } from "./pages/WorkflowBuilder";
 import { WorkflowDetailPage } from "./pages/WorkflowDetail";
 import { WorkflowsPage } from "./pages/Workflows";
@@ -17,6 +18,7 @@ const NAV = [
   { to: "/agents", label: "Agents" },
   { to: "/workflows", label: "Workflows" },
   { to: "/runs", label: "Runs" },
+  { to: "/tools", label: "Tools" },
 ];
 
 export function App() {
@@ -54,6 +56,7 @@ export function App() {
           <Route path="/workflows/:id/edit" element={<WorkflowBuilderPage />} />
           <Route path="/runs" element={<RunsPage />} />
           <Route path="/runs/:id" element={<RunDetailPage />} />
+          <Route path="/tools" element={<ToolsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>

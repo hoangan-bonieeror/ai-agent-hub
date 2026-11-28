@@ -86,6 +86,7 @@ export function AgentFormPage() {
   const navigate = useNavigate();
   const existing = useApi(() => (id ? api.getAgent(id) : Promise.resolve(undefined)), [id]);
   const runtimes = useApi(() => api.runtimes(), []);
+  const registry = useApi(() => api.listTools(), []);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [slugTouched, setSlugTouched] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -204,7 +205,15 @@ export function AgentFormPage() {
             <label className="field">
               <span>Tools</span>
               <input className="input" value={form.tools} onChange={(e) => set("tools", e.target.value)} placeholder="web_search, calculator" />
-              <small className="muted">Comma separated. Tools not granted here are denied.</small>
+              <small className="muted">Comma separated. Tools not granted here are denied. Click to add:</small>
+              <ToolPicker
+                tools={(registry.data?.items ?? []).filter((t) => t.enabled).map((t) => t.name)}
+                selected={splitList(form.tools)}
+                onToggle={(name) => {
+                  const current = splitList(form.tools);
+                  set("tools", (current.includes(name) ? current.filter((t) => t !== name) : [...current, name]).join(", "));
+                }}
+              />
             </label>
             <label className="field">
               <span>Capabilities</span>
@@ -234,5 +243,18 @@ export function AgentFormPage() {
         </div>
       </form>
     </>
+  );
+}
+
+function ToolPicker({ tools, selected, onToggle }: { tools: string[]; selected: string[]; onToggle: (name: string) => void }) {
+  if (!tools.length) return null;
+  return (
+    <div className="tool-picker">
+      {tools.map((t) => (
+        <button key={t} type="button" className={`chip${selected.includes(t) ? " on" : ""}`} onClick={() => onToggle(t)}>
+          {t}
+        </button>
+      ))}
+    </div>
   );
 }
