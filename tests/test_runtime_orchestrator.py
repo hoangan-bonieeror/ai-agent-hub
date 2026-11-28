@@ -259,14 +259,10 @@ def test_sample_workflow_runs_sequentially_and_passes_outputs():
     assert all(t.status == RunStatus.COMPLETED for t in result.tasks)
     assert [e.type for e in events] == [
         "workflow.started",
-        "task.started",
-        "task.completed",
-        "task.started",
-        "task.completed",
-        "task.started",
-        "task.completed",
+        *["task.queued", "task.started", "task.completed"] * 3,
         "workflow.completed",
     ]
+    assert {e.task_id for e in events if e.step_id} == {t.id for t in result.tasks}
 
 
 def test_failed_step_stops_run_and_skips_rest():
@@ -286,7 +282,7 @@ def test_failed_step_stops_run_and_skips_rest():
     ]
     assert "bad data" in result.error and "finance" in result.error
     assert [c[0] for c in rt.calls] == ["research-agent", "finance-agent"]
-    assert events[-2].type == "task.failed" and events[-1].type == "workflow.failed"
+    assert [e.type for e in events[-3:]] == ["task.failed", "task.skipped", "workflow.failed"]
 
 
 def test_disabled_missing_and_unknown_runtime_agents_fail_the_step():
