@@ -127,7 +127,12 @@ class OpenAIAgentRuntime(AgentRuntime):
                     f"MCP server '{name}' does not allow tools {blocked} for agents"
                 )
             servers.append(
-                build_server(spec, allowed_tools=allowed, allow_stdio=self.allow_stdio_mcp)
+                build_server(
+                    spec,
+                    allowed_tools=allowed,
+                    blocked_tools=config.blocked_tools,
+                    allow_stdio=self.allow_stdio_mcp,
+                )
             )
         return servers
 
@@ -148,6 +153,7 @@ class OpenAIAgentRuntime(AgentRuntime):
                 agent_id=agent_config.id,
                 runtime=self.name,
                 status=status,
+                model=agent_config.model or self.default_model,
                 duration_ms=int((time.monotonic() - started) * 1000),
                 **kw,
             )

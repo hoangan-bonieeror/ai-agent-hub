@@ -150,14 +150,27 @@ def build_server(
     spec: McpServerSpec,
     *,
     allowed_tools: list[str] | None = None,
+    blocked_tools: list[str] | None = None,
     allow_stdio: bool,
 ) -> MCPServer:
-    """An unconnected SDK server object, limited to ``allowed_tools``."""
-    tool_filter = (
+    """An unconnected SDK server object, limited to ``allowed_tools`` and
+    hiding tools whose ``mcp:<server>/<tool>`` name matches ``blocked_tools``."""
+    tool_filter: Any = (
         create_static_tool_filter(allowed_tool_names=allowed_tools)
         if allowed_tools is not None
         else None
     )
+    if blocked_tools:
+        from app.policy.rules import tool_denied
+
+        allowed = None if allowed_tools is None else set(allowed_tools)
+        patterns = list(blocked_tools)
+
+        def tool_filter(_context: Any, tool: Any) -> bool:
+            if allowed is not None and tool.name not in allowed:
+                return False
+            return not tool_denied(tool_ref(spec.name, tool.name), patterns)
+
     common: dict[str, Any] = {
         "name": spec.name,
         "client_session_timeout_seconds": spec.timeout_seconds,

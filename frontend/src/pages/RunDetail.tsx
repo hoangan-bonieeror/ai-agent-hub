@@ -6,7 +6,7 @@ import { DagView } from "../components/DagView";
 import { Card, ErrorBox, JsonBlock, Loading, PageHeader, Stat, StatusBadge } from "../components/ui";
 import { useApi } from "../hooks/useApi";
 import { useRunEvents } from "../hooks/useRunEvents";
-import { between, dateTime, duration, number, shortId } from "../lib/format";
+import { between, dateTime, duration, money, number, shortId } from "../lib/format";
 
 const FINISHED = new Set(["succeeded", "failed", "cancelled"]);
 
@@ -101,6 +101,11 @@ export function RunDetailPage() {
         <Stat label="Steps finished" value={`${done} / ${tasks.length}`} />
         <Stat label="Tokens" value={number(r.usage.total_tokens)} hint={`${number(r.usage.input_tokens)} in · ${number(r.usage.output_tokens)} out`} />
         <Stat label="Model calls" value={number(r.usage.requests)} />
+        <Stat
+          label="Cost"
+          value={money(r.cost_usd)}
+          hint={r.unpriced_executions ? <Link to="/costs">{r.unpriced_executions} calls without a price</Link> : "from model prices"}
+        />
       </div>
 
       <Card
@@ -177,6 +182,8 @@ function TaskPanel({ task }: { task: RunTask }) {
                 <th>Status</th>
                 <th>Duration</th>
                 <th>Tokens</th>
+                <th>Model</th>
+                <th className="right">Cost</th>
                 <th />
               </tr>
             </thead>
@@ -189,6 +196,8 @@ function TaskPanel({ task }: { task: RunTask }) {
                   </td>
                   <td>{duration(e.duration_ms)}</td>
                   <td>{number(e.token_usage?.total_tokens ?? null)}</td>
+                  <td className="mono small">{e.model ?? "—"}</td>
+                  <td className="right">{e.cost_usd == null ? <span className="muted" title="No price for this model">—</span> : money(e.cost_usd)}</td>
                   <td className="right">
                     <button
                       className="btn btn-small"

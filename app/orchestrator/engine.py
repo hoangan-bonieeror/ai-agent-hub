@@ -28,6 +28,7 @@ from app.orchestrator.workflow import (
     WorkflowRun,
     WorkflowStep,
 )
+from app.policy.engine import PolicyDenied, PolicyEngine
 from app.runtimes.base import (
     AgentConfig,
     AgentResult,
@@ -63,9 +64,11 @@ class AgentOrchestrator:
         *,
         on_event: EventHandler | None = None,
         max_parallel: int = DEFAULT_MAX_PARALLEL,
+        policy: PolicyEngine | None = None,
     ) -> None:
         self.registry = registry
         self.runtimes = runtimes
+        self.policy = policy
         self.on_event = on_event
         self.max_parallel = max_parallel
         # Registries may share one DB session, which allows no concurrent use.
@@ -105,15 +108,30 @@ class AgentOrchestrator:
             raise AgentUnavailableError(f"Agent '{agent_id}' is disabled")
         return agent
 
-    async def execute_task(self, agent_id: str, task_input: dict[str, Any]) -> AgentResult:
-        """Run one agent directly (backs ``POST /api/v1/agents/{id}/run``).
+    async def execute_task(
+        self, agent_id: str, task_input: dict[str, Any], *, workflow: str | None = None
+    ) -> AgentResult:
+        """Run one agent (directly for ``POST /api/v1/agents/{id}/run``, or as
+        a step of ``workflow``), after the policy engine has checked the call.
 
-        Lookup and runtime errors are raised; agent failures come back as a
-        non-completed :class:`AgentResult`.
+        Lookup, runtime and policy errors (:class:`PolicyDenied`) are raised;
+        agent failures come back as a non-completed :class:`AgentResult`.
         """
         agent = await self._resolve(agent_id)
         runtime = self.runtimes.get(agent.runtime)
-        return await runtime.execute(agent_config=agent, task_input=task_input)
+        decision = None
+        if self.policy is not None:
+            decision = await self.policy.check(agent, workflow=workflow)
+            agent = decision.agent
+            for warning in decision.warnings:
+                logger.warning("%s (agent %s)", warning, agent.id)
+        result = await runtime.execute(agent_config=agent, task_input=task_input)
+        if result.model is None:
+            result.model = agent.model
+        policy_meta = decision.metadata() if decision else None
+        if policy_meta:
+            result.metadata = {**result.metadata, "policy": policy_meta}
+        return result
 
     # --- workflows -------------------------------------------------------------
 
@@ -327,8 +345,13 @@ class AgentOrchestrator:
                 "task.started", run, task, attempt=len(task.attempts), attempt_id=attempt.id
             )
             try:
-                result = await self.execute_task(step.agent_id, task_input)
-            except (LookupError, AgentUnavailableError, RuntimeNotFoundError) as exc:
+                result = await self.execute_task(step.agent_id, task_input, workflow=run.workflow)
+            except (
+                LookupError,
+                AgentUnavailableError,
+                RuntimeNotFoundError,
+                PolicyDenied,
+            ) as exc:
                 attempt.error = str(exc)
             except asyncio.CancelledError:
                 attempt.cancelled = True

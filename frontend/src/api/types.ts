@@ -68,8 +68,12 @@ export interface AgentResult {
   output: unknown;
   error: string | null;
   usage: TokenUsage;
+  model: string | null;
   duration_ms: number;
   metadata: Record<string, unknown>;
+  // Direct runs (POST /agents/{id}/run) are recorded with their cost.
+  execution_id?: string;
+  cost_usd?: number | null;
 }
 
 export type StepKind = "agent" | "review" | "aggregate";
@@ -132,6 +136,7 @@ export interface RunSummary {
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
+  cost_usd?: number;
   links: RunLinks;
 }
 
@@ -142,6 +147,8 @@ export interface ExecutionSummary {
   completed_at: string | null;
   duration_ms: number | null;
   token_usage: Partial<TokenUsage> | null;
+  model: string | null;
+  cost_usd: number | null;
   error: string | null;
 }
 
@@ -165,11 +172,13 @@ export interface RunDetail extends RunSummary {
   input: Record<string, unknown>;
   output: unknown;
   usage: TokenUsage;
+  cost_usd: number;
+  unpriced_executions: number;
   tasks: RunTask[];
 }
 
 export interface Execution extends ExecutionSummary {
-  task_id: string;
+  task_id: string | null;
   run_id: string | null;
   step_id: string | null;
   agent_id: string | null;
@@ -263,4 +272,93 @@ export interface MemoryInput {
   owner?: string | null;
   tags?: string[];
   expires_at?: string | null;
+}
+
+export interface CostFigures {
+  executions: number;
+  cost_usd: number;
+  unpriced_executions: number;
+  requests: number;
+  input_tokens: number;
+  output_tokens: number;
+}
+
+export interface CostGroup extends CostFigures {
+  key: string | null;
+}
+
+export interface CostSummary {
+  since: string;
+  until: string;
+  days: number;
+  total: CostFigures;
+  by_day: (CostFigures & { day: string })[];
+  by_agent: CostGroup[];
+  by_model: CostGroup[];
+  by_workflow: CostGroup[];
+  unpriced_models: { key: string | null; unpriced_executions: number; input_tokens: number; output_tokens: number }[];
+}
+
+export interface ModelPrice {
+  id: string;
+  model: string;
+  input_per_mtok: number;
+  output_per_mtok: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PolicyKind = "budget" | "tools" | "models";
+export type PolicyScope = "global" | "agent" | "workflow";
+
+export interface BudgetRules {
+  limit_usd: number;
+  period: "day" | "month" | "total";
+  action: "block" | "warn";
+}
+
+export interface BudgetStatus {
+  spent_usd: number;
+  limit_usd: number;
+  since: string | null;
+  used: number;
+  reached: boolean;
+}
+
+export interface Policy {
+  id: string;
+  name: string;
+  description: string | null;
+  kind: PolicyKind;
+  scope: PolicyScope;
+  target: string | null;
+  rules: Record<string, unknown>;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  status?: BudgetStatus;
+}
+
+export interface PolicyInput {
+  name?: string;
+  description?: string | null;
+  kind?: PolicyKind;
+  scope?: PolicyScope;
+  target?: string | null;
+  rules?: Record<string, unknown>;
+  enabled?: boolean;
+}
+
+export type PolicyCheckResult =
+  | { allowed: false; policy: string; reason: string }
+  | { allowed: true; applied: string[]; tools: string[]; removed_tools: string[]; blocked_tools: string[]; warnings: string[] };
+
+export interface AuditEntry {
+  id: number;
+  actor: string;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  timestamp: string;
+  metadata: Record<string, unknown>;
 }

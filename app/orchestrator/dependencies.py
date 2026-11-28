@@ -8,6 +8,7 @@ from agents import set_default_openai_key
 
 from app.core.config import get_settings
 from app.memory.store import DbMemoryStore
+from app.policy.engine import DbPolicyStore, PolicyEngine
 from app.runtimes import RuntimeRegistry
 from app.runtimes.fake_runtime import FakeAgentRuntime
 from app.runtimes.openai_runtime import OpenAIAgentRuntime
@@ -34,3 +35,9 @@ def get_runtime_registry() -> RuntimeRegistry:
     if settings.enable_fake_runtime:
         runtimes.register(FakeAgentRuntime(delay_seconds=settings.fake_runtime_delay_seconds))
     return runtimes
+
+
+@lru_cache
+def get_policy_engine() -> PolicyEngine:
+    """Checks budgets, tool rules and model rules before each agent call."""
+    return PolicyEngine(DbPolicyStore())

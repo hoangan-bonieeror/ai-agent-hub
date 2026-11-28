@@ -4,13 +4,14 @@ import { api } from "../api/client";
 import type { AgentResult } from "../api/types";
 import { Card, ErrorBox, JsonBlock, Loading, PageHeader, StatusBadge, Tags } from "../components/ui";
 import { useApi } from "../hooks/useApi";
-import { dateTime, duration, number, timeAgo } from "../lib/format";
+import { dateTime, duration, money, number, timeAgo } from "../lib/format";
 
 export function AgentDetailPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const agent = useApi(() => api.getAgent(id), [id]);
   const versions = useApi(() => api.agentVersions(id), [id]);
+  const spend = useApi(() => api.costs({ days: 30, agent: id }), [id]);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string>();
 
@@ -99,6 +100,17 @@ export function AgentDetailPage() {
               <dt>Limits</dt>
               <dd>
                 {a.limits.max_steps} steps, {a.limits.timeout_seconds} s timeout
+              </dd>
+              <dt>Spend, 30 days</dt>
+              <dd>
+                {spend.data ? (
+                  <>
+                    {money(spend.data.total.cost_usd)} · {number(spend.data.total.executions)} calls ·{" "}
+                    <Link to={`/costs?agent=${a.slug}`}>details →</Link>
+                  </>
+                ) : (
+                  "…"
+                )}
               </dd>
               <dt>Version</dt>
               <dd>
@@ -190,11 +202,24 @@ function TryAgent({ slug, disabled }: { slug: string; disabled: boolean }) {
             <StatusBadge status={result.status === "completed" ? "succeeded" : result.status} />
             <span>{duration(result.duration_ms)}</span>
             <span>{number(result.usage.total_tokens)} tokens</span>
+            {result.cost_usd != null && <span>{money(result.cost_usd)}</span>}
           </div>
           {result.error && <div className="error-text">{result.error}</div>}
+          <PolicyNote metadata={result.metadata} />
           <JsonBlock value={result.output} />
         </div>
       )}
     </Card>
+  );
+}
+
+function PolicyNote({ metadata }: { metadata: Record<string, unknown> }) {
+  const policy = metadata.policy as { removed_tools?: string[]; warnings?: string[] } | undefined;
+  if (!policy) return null;
+  return (
+    <div className="small warn-text">
+      {policy.removed_tools?.length ? <div>Policies removed tools: {policy.removed_tools.join(", ")}</div> : null}
+      {policy.warnings?.map((w) => <div key={w}>{w}</div>)}
+    </div>
   );
 }

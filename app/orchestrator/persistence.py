@@ -19,8 +19,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.models import Execution, Task
 from app.models import WorkflowRun as WorkflowRunRow
 from app.orchestrator.workflow import RunStatus, TaskAttempt, TaskRun, WorkflowEvent, WorkflowRun
+from app.policy.pricing import PriceBook, load_price_book
 from app.repositories.agent_repository import AgentNotFoundError, AgentRepository
-from app.runtimes.base import AgentResultStatus
+from app.runtimes.base import AgentResult, AgentResultStatus
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ class RunRecorder:
         self.session = sessionmaker()
         self._lock = asyncio.Lock()
         self._agents: dict[str, tuple[uuid.UUID | None, int | None]] = {}
+        self._prices = PriceBook()
 
     async def close(self) -> None:
         await self.session.close()
@@ -72,6 +74,7 @@ class RunRecorder:
         self, workflow_id: uuid.UUID, run: WorkflowRun, requested_by: str | None
     ) -> None:
         """Insert the run as pending, with a pending row per task, and commit."""
+        self._prices = await load_price_book(self.session)
         repo = AgentRepository(self.session)
         for slug in {t.agent_id for t in run.tasks if t.agent_id}:
             try:
@@ -179,8 +182,35 @@ class RunRecorder:
             execution.started_at = attempt.started_at
             execution.completed_at = attempt.completed_at
             execution.token_usage = result.usage.model_dump() if result else None
+            execution.model = result.model if result else None
+            execution.cost_usd = self._prices.cost(result.model, result.usage) if result else None
             execution.error = attempt.error
             execution.logs = _logs(attempt)
+
+
+def direct_execution(
+    result: AgentResult,
+    *,
+    agent_id: uuid.UUID | None,
+    agent_version: int | None,
+    prices: PriceBook,
+) -> Execution:
+    """The record of a direct agent run (no workflow task)."""
+    from datetime import UTC, datetime, timedelta
+
+    completed = datetime.now(UTC)
+    return Execution(
+        agent_id=agent_id,
+        agent_version=agent_version,
+        status=EXECUTION_STATUS[result.status],
+        started_at=completed - timedelta(milliseconds=result.duration_ms),
+        completed_at=completed,
+        token_usage=result.usage.model_dump(),
+        model=result.model,
+        cost_usd=prices.cost(result.model, result.usage),
+        error=result.error,
+        logs=[{"metadata": result.metadata}] if result.metadata else None,
+    )
 
 
 def _logs(attempt: TaskAttempt) -> list[dict[str, Any]] | None:

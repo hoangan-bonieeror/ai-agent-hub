@@ -117,7 +117,8 @@ code {
 .small {
   font-size: 12px;
 }
-.right {
+.right,
+.table th.right {
   text-align: right;
 }
 .clip {
@@ -1028,4 +1029,149 @@ textarea.input {
   background: var(--accent-soft);
   color: var(--accent);
   border-color: transparent;
+}
+
+/* ---- costs ---- */
+.notice-warn {
+  background: var(--warn-soft);
+  border-color: color-mix(in srgb, var(--warn) 30%, transparent);
+  color: var(--text);
+  margin-bottom: 16px;
+}
+.toolbar-inline {
+  margin: 0;
+  align-items: center;
+}
+.spend-chart {
+  position: relative;
+}
+.spend-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.spend-chart .grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.spend-chart .axis {
+  fill: var(--muted);
+  font-size: 11px;
+}
+.spend-chart .hit {
+  fill: transparent;
+}
+.spend-chart .bar {
+  fill: var(--accent);
+  opacity: 0.85;
+}
+.spend-chart .bar.on {
+  opacity: 1;
+}
+.chart-tip {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.12);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.table-compact td,
+.table-compact th {
+  padding: 6px 8px;
+}
+.share {
+  height: 3px;
+  margin-top: 4px;
+  background: var(--panel-2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.share span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+}
+.price-form {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 12px;
+}
+
+/* ---- policies ---- */
+.policies {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.policy {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.policy:first-child {
+  border-top: 0;
+}
+.policy-off {
+  opacity: 0.6;
+}
+.policy-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.budget-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.meter {
+  height: 8px;
+  background: var(--panel-2);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 4px 0;
+}
+.meter span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+.meter-good span {
+  background: var(--good);
+}
+.meter-warn span {
+  background: var(--warn);
+}
+.meter-bad span {
+  background: var(--bad);
+}
+.audit {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+@media (max-width: 720px) {
+  .price-form {
+    grid-template-columns: 1fr;
+  }
 }

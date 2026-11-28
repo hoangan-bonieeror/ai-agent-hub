@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import type { RunSummary } from "../api/types";
-import { between, duration, shortId, timeAgo } from "../lib/format";
+import { between, duration, money, shortId, timeAgo } from "../lib/format";
 import { StatusBadge } from "./ui";
 
 export function RunsTable({ runs, showWorkflow = true }: { runs: RunSummary[]; showWorkflow?: boolean }) {
@@ -14,6 +14,7 @@ export function RunsTable({ runs, showWorkflow = true }: { runs: RunSummary[]; s
             <th>Status</th>
             <th>Started</th>
             <th>Duration</th>
+            <th className="right">Cost</th>
             <th>By</th>
           </tr>
         </thead>
@@ -37,6 +38,7 @@ export function RunsTable({ runs, showWorkflow = true }: { runs: RunSummary[]; s
               </td>
               <td title={r.started_at ?? r.created_at}>{timeAgo(r.started_at ?? r.created_at)}</td>
               <td>{duration(between(r.started_at, r.completed_at))}</td>
+              <td className="right">{money(r.cost_usd)}</td>
               <td className="muted">{r.requested_by ?? "—"}</td>
             </tr>
           ))}
