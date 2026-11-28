@@ -8,6 +8,7 @@ from agents import set_default_openai_key
 
 from app.core.config import get_settings
 from app.runtimes import RuntimeRegistry
+from app.runtimes.fake_runtime import FakeAgentRuntime
 from app.runtimes.openai_runtime import OpenAIAgentRuntime
 
 
@@ -19,4 +20,7 @@ def get_runtime_registry() -> RuntimeRegistry:
     if settings.openai_api_key is not None:
         # Settings may come from .env, which the SDK does not read on its own.
         set_default_openai_key(settings.openai_api_key.get_secret_value())
-    return RuntimeRegistry([OpenAIAgentRuntime()])
+    runtimes = RuntimeRegistry([OpenAIAgentRuntime()])
+    if settings.enable_fake_runtime:
+        runtimes.register(FakeAgentRuntime(delay_seconds=settings.fake_runtime_delay_seconds))
+    return runtimes

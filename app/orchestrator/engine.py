@@ -117,8 +117,8 @@ class AgentOrchestrator:
 
     # --- workflows -------------------------------------------------------------
 
+    @staticmethod
     def new_run(
-        self,
         workflow: WorkflowDefinition,
         workflow_input: dict[str, Any],
         *,

@@ -22,6 +22,14 @@ class Settings(BaseSettings):
     # Default execution limits (plan section 11); agents can override per config.
     default_task_timeout_seconds: int = 120
     default_max_steps: int = 10
+    # Most workflow steps one run executes at the same time (a workflow's
+    # max_parallel overrides it).
+    workflow_max_parallel: int = 4
+
+    # Development only: also serve agents whose runtime is "fake", which answer
+    # without calling a model, after a delay so progress events are visible.
+    enable_fake_runtime: bool = False
+    fake_runtime_delay_seconds: float = 1.0
 
 
 @lru_cache

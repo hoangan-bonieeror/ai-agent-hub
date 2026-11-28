@@ -33,6 +33,7 @@ AGENT_STATUSES = ("active", "disabled", "archived")
 RUN_STATUSES = ("pending", "running", "succeeded", "failed", "cancelled")
 TASK_STATUSES = ("pending", "queued", "running", "succeeded", "failed", "cancelled", "skipped")
 EXECUTION_STATUSES = ("running", "succeeded", "failed", "timed_out", "cancelled")
+STEP_KINDS = ("agent", "review", "aggregate")
 
 
 def in_list(column: str, values: tuple[str, ...]) -> str:

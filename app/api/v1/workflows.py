@@ -3,18 +3,18 @@
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.agents import ActorDep
-from app.core.database import get_session
+from app.api.v1.runs import ManagerDep, run_view
+from app.core.config import get_settings
+from app.core.database import get_session, get_sessionmaker
 from app.models import Workflow
-from app.orchestrator import AgentOrchestrator, WorkflowDefinition
+from app.orchestrator import WorkflowDefinition
 from app.orchestrator.dependencies import get_runtime_registry
-from app.orchestrator.persistence import RUN_STATUS, RunStore, as_json_object
-from app.registry.agent_registry import AgentRegistry
 from app.runtimes import RuntimeRegistry
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -25,6 +25,10 @@ RuntimesDep = Annotated[RuntimeRegistry, Depends(get_runtime_registry)]
 
 class WorkflowRunRequest(BaseModel):
     input: dict[str, Any] = Field(default_factory=dict)
+    wait: bool = Field(
+        default=True,
+        description="Wait for the run to finish. false: return 202 at once and stream progress.",
+    )
 
 
 def _workflow_read(row: Workflow) -> dict[str, Any]:
@@ -55,7 +59,31 @@ async def create_workflow(body: WorkflowDefinition, session: SessionDep) -> dict
     return _workflow_read(row)
 
 
-async def _load_workflow(session: AsyncSession, workflow_id: str) -> Workflow:
+@router.get("")
+async def list_workflows(
+    session: SessionDep,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict[str, Any]:
+    """Every stored workflow version, by name then newest version first."""
+    rows = await session.scalars(
+        select(Workflow)
+        .order_by(Workflow.name, Workflow.version.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return {"items": [_workflow_read(r) for r in rows], "limit": limit, "offset": offset}
+
+
+@router.get("/{workflow_id}")
+async def get_workflow(workflow_id: str, session: SessionDep) -> dict[str, Any]:
+    """A workflow by UUID, or by name (its newest enabled version)."""
+    return _workflow_read(await _load_workflow(session, workflow_id, allow_disabled=True))
+
+
+async def _load_workflow(
+    session: AsyncSession, workflow_id: str, *, allow_disabled: bool = False
+) -> Workflow:
     """`workflow_id` is a workflow UUID, or a name (its newest enabled version)."""
     try:
         stmt = select(Workflow).where(Workflow.id == uuid.UUID(workflow_id))
@@ -69,58 +97,46 @@ async def _load_workflow(session: AsyncSession, workflow_id: str) -> Workflow:
     row = await session.scalar(stmt)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Workflow not found: {workflow_id}")
-    if not row.enabled:
+    if not row.enabled and not allow_disabled:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Workflow is disabled: {workflow_id}")
     return row
 
 
-@router.post("/{workflow_id}/run")
+@router.post(
+    "/{workflow_id}/run",
+    responses={202: {"description": "Started in the background (wait=false)"}},
+)
 async def run_workflow(
     workflow_id: str,
     body: WorkflowRunRequest,
+    response: Response,
     session: SessionDep,
     runtimes: RuntimesDep,
+    manager: ManagerDep,
     actor: ActorDep,
 ) -> dict[str, Any]:
-    """Runs the workflow's steps in order and returns when it finishes.
+    """Runs the workflow. Independent steps run in parallel.
 
-    A failed step still returns 200 with ``status: "failed"``: the run itself
-    was recorded. Progress streaming (SSE) and background runs come in Phase 2.
+    With ``wait`` (the default) the call returns when the run finishes. A
+    failed step still returns 200 with ``status: "failed"``: the run itself
+    was recorded. With ``"wait": false`` it returns 202 at once; follow the
+    run at ``links.events`` (Server-Sent Events) or ``links.self``.
     """
     row = await _load_workflow(session, workflow_id)
     definition = WorkflowDefinition.model_validate({**row.definition, "version": row.version})
+    workflow = {"id": str(row.id), "name": row.name, "version": row.version}
+    await session.close()  # don't hold a connection for the length of the run
 
-    store = RunStore(session)
-    run_row = await store.start(row.id, body.input, requested_by=actor)
-    orchestrator = AgentOrchestrator(AgentRegistry(session), runtimes)
-    try:
-        run = await orchestrator.run_workflow(definition, body.input)
-    except Exception:
-        # The orchestrator records agent failures itself; this is a bug path.
-        # Don't leave the committed run row stuck at "running".
-        await session.rollback()
-        run_row.status = "failed"
-        run_row.error = "Internal error while running the workflow"
-        await session.commit()
-        raise
-    await store.finish(run_row, run)
-
-    return {
-        "run_id": str(run_row.id),
-        "workflow": {"id": str(row.id), "name": row.name, "version": row.version},
-        "status": RUN_STATUS[run.status],
-        "output": run.output,
-        "error": run.error,
-        "usage": run.usage.model_dump(),
-        "tasks": [
-            {
-                "step_id": t.step_id,
-                "agent_id": t.agent_id,
-                "status": RUN_STATUS[t.status],
-                "output": as_json_object(t.result.output) if t.result else None,
-                "error": t.error,
-                "duration_ms": t.result.duration_ms if t.result else None,
-            }
-            for t in run.tasks
-        ],
-    }
+    run = await manager.start(
+        sessionmaker=get_sessionmaker(),
+        workflow_id=row.id,
+        definition=definition,
+        workflow_input=body.input,
+        runtimes=runtimes,
+        requested_by=actor,
+        max_parallel=get_settings().workflow_max_parallel,
+        wait=body.wait,
+    )
+    if not body.wait:
+        response.status_code = status.HTTP_202_ACCEPTED
+    return run_view(run, workflow)

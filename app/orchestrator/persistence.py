@@ -1,25 +1,38 @@
-"""Writes orchestrator runs to workflow_runs, tasks and executions."""
+"""Keeps workflow_runs, tasks and executions in step with a running workflow.
+
+:class:`RunRecorder` writes the run and its pending tasks before the run
+starts, updates rows as progress events arrive (so the status endpoints show
+live state), and reconciles everything once more when the run ends. It uses
+its own session, so it never shares one with the agent registry lookups that
+happen in parallel.
+"""
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import uuid
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models import Execution, Task
 from app.models import WorkflowRun as WorkflowRunRow
-from app.orchestrator.workflow import RunStatus, WorkflowRun
+from app.orchestrator.workflow import RunStatus, TaskAttempt, TaskRun, WorkflowEvent, WorkflowRun
 from app.repositories.agent_repository import AgentNotFoundError, AgentRepository
 from app.runtimes.base import AgentResultStatus
+
+logger = logging.getLogger(__name__)
 
 # Orchestrator states -> values allowed by the DB CHECK constraints.
 RUN_STATUS = {
     RunStatus.PENDING: "pending",
+    RunStatus.QUEUED: "queued",  # tasks only
     RunStatus.RUNNING: "running",
     RunStatus.COMPLETED: "succeeded",
     RunStatus.FAILED: "failed",
     RunStatus.SKIPPED: "skipped",  # tasks only
+    RunStatus.CANCELLED: "cancelled",
 }
 EXECUTION_STATUS = {
     AgentResultStatus.COMPLETED: "succeeded",
@@ -27,6 +40,8 @@ EXECUTION_STATUS = {
     AgentResultStatus.TIMED_OUT: "timed_out",
     AgentResultStatus.STEP_LIMIT_EXCEEDED: "failed",
 }
+#: Events that change no stored state.
+_NO_STATE = {"review.completed", "task.revision_requested"}
 
 
 def as_json_object(value: Any) -> dict[str, Any] | None:
@@ -36,72 +51,151 @@ def as_json_object(value: Any) -> dict[str, Any] | None:
     return {"result": value}
 
 
-class RunStore:
-    def __init__(self, session: AsyncSession) -> None:
-        self.session = session
-        self._agents = AgentRepository(session)
+def execution_status(attempt: TaskAttempt) -> str:
+    if attempt.cancelled:
+        return "cancelled"
+    if attempt.result is not None:
+        return EXECUTION_STATUS[attempt.result.status]
+    return "running" if attempt.completed_at is None else "failed"
 
-    async def start(
-        self, workflow_id: uuid.UUID, run_input: dict[str, Any], requested_by: str | None
-    ) -> WorkflowRunRow:
-        """Insert and commit the run as running, so it is visible while it executes."""
-        row = WorkflowRunRow(
-            workflow_id=workflow_id,
-            status="running",
-            input=run_input,
-            requested_by=requested_by,
+
+class RunRecorder:
+    def __init__(self, sessionmaker: async_sessionmaker[AsyncSession]) -> None:
+        self.session = sessionmaker()
+        self._lock = asyncio.Lock()
+        self._agents: dict[str, tuple[uuid.UUID | None, int | None]] = {}
+
+    async def close(self) -> None:
+        await self.session.close()
+
+    async def create(
+        self, workflow_id: uuid.UUID, run: WorkflowRun, requested_by: str | None
+    ) -> None:
+        """Insert the run as pending, with a pending row per task, and commit."""
+        repo = AgentRepository(self.session)
+        for slug in {t.agent_id for t in run.tasks if t.agent_id}:
+            try:
+                agent = await repo.get(slug, include_archived=True)
+            except AgentNotFoundError:
+                self._agents[slug] = (None, None)
+            else:
+                self._agents[slug] = (agent.id, agent.current_version)
+
+        run_id = uuid.UUID(run.id)
+        self.session.add(
+            WorkflowRunRow(
+                id=run_id,
+                workflow_id=workflow_id,
+                status=RUN_STATUS[run.status],
+                input=run.input,
+                requested_by=requested_by,
+            )
         )
-        self.session.add(row)
+        await self.session.flush()  # the models have no relationships to order inserts by
+        self.session.add_all(
+            Task(
+                id=uuid.UUID(t.id),
+                run_id=run_id,
+                assigned_agent_id=self._agent_ref(t.agent_id)[0],
+                name=t.step_id,
+                kind=t.kind,
+                depends_on=t.depends_on,
+                status=RUN_STATUS[t.status],
+            )
+            for t in run.tasks
+        )
         await self.session.commit()
-        return row
 
-    async def finish(self, row: WorkflowRunRow, run: WorkflowRun) -> None:
+    async def record(self, event: WorkflowEvent, run: WorkflowRun) -> None:
+        """Event handler: write what the event changed. Errors are logged and
+        left for :meth:`finish` to repair. The write is shielded, so cancelling
+        the run never interrupts a commit halfway."""
+        if event.type in _NO_STATE:
+            return
+        await asyncio.shield(self._record(event, run))
+
+    async def _record(self, event: WorkflowEvent, run: WorkflowRun) -> None:
+        async with self._lock:
+            try:
+                if event.step_id is not None:
+                    await self._sync_task(run.task(event.step_id), uuid.UUID(run.id))
+                else:
+                    await self._sync_run(run)
+                await self.session.commit()
+            except Exception:
+                logger.exception("Could not record %s for run %s", event.type, run.id)
+                await self.session.rollback()
+
+    async def finish(self, run: WorkflowRun) -> None:
+        """Write the final state of the run and every task."""
+        async with self._lock:
+            try:
+                for task in run.tasks:
+                    await self._sync_task(task, uuid.UUID(run.id))
+                await self._sync_run(run)
+                await self.session.commit()
+            except Exception:
+                await self.session.rollback()
+                raise
+
+    # --- internals -------------------------------------------------------------
+
+    def _agent_ref(self, slug: str | None) -> tuple[uuid.UUID | None, int | None]:
+        return self._agents.get(slug, (None, None)) if slug else (None, None)
+
+    async def _sync_run(self, run: WorkflowRun) -> None:
+        row = await self.session.get(WorkflowRunRow, uuid.UUID(run.id))
+        if row is None:
+            return
         row.status = RUN_STATUS[run.status]
         row.output = as_json_object(run.output)
         row.error = run.error
         row.started_at = run.started_at
         row.completed_at = run.completed_at
 
-        # Resolve agent refs before adding rows: lookups autoflush, and the
-        # models have no relationships to order inserts by.
-        refs = [await self._agent_ref(t.agent_id) for t in run.tasks]
-        tasks = [
-            Task(
-                id=uuid.uuid4(),
-                run_id=row.id,
-                assigned_agent_id=agent_uuid,
-                name=t.step_id,
-                input=t.input,
-                output=as_json_object(t.result.output if t.result else None),
-                status=RUN_STATUS[t.status],
-            )
-            for t, (agent_uuid, _) in zip(run.tasks, refs, strict=True)
-        ]
-        self.session.add_all(tasks)
-        await self.session.flush()
+    async def _sync_task(self, task: TaskRun, run_id: uuid.UUID) -> None:
+        row = await self.session.get(Task, uuid.UUID(task.id))
+        if row is None:
+            return
+        row.status = RUN_STATUS[task.status]
+        row.input = task.input
+        row.output = as_json_object(task.output)
+        row.error = task.error
+        row.retry_count = max(len(task.attempts) - 1, 0)
 
-        for task_run, task, (agent_uuid, agent_version) in zip(run.tasks, tasks, refs, strict=True):
-            if task_run.started_at is None:
-                continue  # skipped, never executed
-            result = task_run.result
-            self.session.add(
-                Execution(
-                    task_id=task.id,
+        agent_uuid, agent_version = self._agent_ref(task.agent_id)
+        for attempt in task.attempts:
+            execution = await self.session.get(Execution, uuid.UUID(attempt.id))
+            if execution is None:
+                execution = Execution(
+                    id=uuid.UUID(attempt.id),
+                    task_id=row.id,
                     agent_id=agent_uuid,
                     agent_version=agent_version,
-                    status=EXECUTION_STATUS[result.status] if result else "failed",
-                    started_at=task_run.started_at,
-                    completed_at=task_run.completed_at,
-                    token_usage=result.usage.model_dump() if result else None,
-                    error=task_run.error,
-                    logs=[{"metadata": result.metadata}] if result and result.metadata else None,
                 )
-            )
-        await self.session.commit()
+                self.session.add(execution)
+            result = attempt.result
+            execution.status = execution_status(attempt)
+            execution.started_at = attempt.started_at
+            execution.completed_at = attempt.completed_at
+            execution.token_usage = result.usage.model_dump() if result else None
+            execution.error = attempt.error
+            execution.logs = _logs(attempt)
 
-    async def _agent_ref(self, slug: str) -> tuple[uuid.UUID | None, int | None]:
-        try:
-            agent = await self._agents.get(slug, include_archived=True)
-        except AgentNotFoundError:
-            return None, None
-        return agent.id, agent.current_version
+
+def _logs(attempt: TaskAttempt) -> list[dict[str, Any]] | None:
+    logs: list[dict[str, Any]] = []
+    revision = attempt.input.get("revision")
+    if revision:
+        logs.append(
+            {
+                "revision": {
+                    "round": revision.get("round"),
+                    "reviewer": revision.get("reviewer"),
+                    "feedback": revision.get("feedback"),
+                }
+            }
+        )
+    if attempt.result is not None and attempt.result.metadata:
+        logs.append({"metadata": attempt.result.metadata})
+    return logs or None
