@@ -7,11 +7,13 @@ from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.database import get_engine
 from app.core.redis import close_redis
+from app.orchestrator.runner import get_run_manager
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     yield
+    await get_run_manager().shutdown()  # background runs are recorded as cancelled
     await close_redis()
     await get_engine().dispose()
 
