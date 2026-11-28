@@ -18,6 +18,7 @@ const KIND_LABEL: Record<string, string> = { agent: "agent", review: "review", a
 
 export function DagView({ steps, statuses, selected, onSelect, flagged, fit }: Props) {
   const layout = useMemo(() => layoutGraph(steps), [steps]);
+  const still = useMemo(() => Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches), []);
   if (!steps.length) return <div className="dag-empty muted">No steps yet</div>;
   return (
     <div className="dag-scroll">
@@ -36,8 +37,23 @@ export function DagView({ steps, statuses, selected, onSelect, flagged, fit }: P
           </marker>
         </defs>
         {layout.edges.map((e) => {
-          const active = statuses?.[e.from] === "succeeded" && statuses?.[e.to] === "running";
-          return <path key={`${e.from}->${e.to}`} d={e.path} className={`dag-edge${active ? " active" : ""}`} markerEnd="url(#arrow)" />;
+          const from = statuses?.[e.from];
+          const to = statuses?.[e.to];
+          const active = from === "succeeded" && (to === "running" || to === "queued");
+          const fired = from === "succeeded" && !active;
+          const blocked = from === "failed" || from === "cancelled";
+          const cls = ["dag-edge", active ? "active" : "", fired ? "fired" : "", blocked ? "blocked" : ""].filter(Boolean).join(" ");
+          return (
+            <g key={`${e.from}->${e.to}`}>
+              <path d={e.path} className={cls} markerEnd="url(#arrow)" />
+              {active && !still &&
+                [0, 1, 2].map((k) => (
+                  <circle key={k} className="dag-signal" r={3.5}>
+                    <animateMotion dur="1.5s" begin={`${k * 0.5}s`} repeatCount="indefinite" path={e.path} />
+                  </circle>
+                ))}
+            </g>
+          );
         })}
         {layout.nodes.map((n) => {
           const status = statuses?.[n.id] ?? "idle";
@@ -56,8 +72,10 @@ export function DagView({ steps, statuses, selected, onSelect, flagged, fit }: P
               onKeyDown={onSelect ? (ev) => (ev.key === "Enter" || ev.key === " ") && onSelect(n.id) : undefined}
             >
               <title>{`${n.id} (${kind})${statuses ? ` — ${status}` : ""}`}</title>
-              <rect width={NODE_W} height={NODE_H} rx={10} />
-              <rect className="dag-stripe" width={5} height={NODE_H} rx={2} />
+              <rect className="dag-body" width={NODE_W} height={NODE_H} rx={12} />
+              <rect className="dag-stripe" x={6} y={10} width={3} height={NODE_H - 20} rx={1.5} />
+              <circle className="dag-terminal" cx={0} cy={NODE_H / 2} r={3.5} />
+              <circle className="dag-terminal" cx={NODE_W} cy={NODE_H / 2} r={3.5} />
               <text x={16} y={23} className="dag-title">
                 {clip(n.id, 20)}
               </text>
@@ -68,6 +86,7 @@ export function DagView({ steps, statuses, selected, onSelect, flagged, fit }: P
                 {KIND_LABEL[kind]}
               </text>
               {status === "running" && <circle className="dag-pulse" cx={NODE_W - 14} cy={41} r={4} />}
+              {status === "running" && <rect className="dag-aura" x={-3} y={-3} width={NODE_W + 6} height={NODE_H + 6} rx={15} />}
             </g>
           );
         })}

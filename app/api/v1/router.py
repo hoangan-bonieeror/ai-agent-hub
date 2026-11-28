@@ -6,6 +6,7 @@ from app.api.v1 import (
     executions,
     mcp,
     memories,
+    network,
     policies,
     runs,
     runtimes,
@@ -24,3 +25,4 @@ api_router.include_router(mcp.router)
 api_router.include_router(memories.router)
 api_router.include_router(costs.router)
 api_router.include_router(policies.router)
+api_router.include_router(network.router)

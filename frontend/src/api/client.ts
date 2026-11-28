@@ -1,6 +1,7 @@
 import type {
   Agent,
   AgentInput,
+  AgentNetwork,
   AgentResult,
   AgentVersion,
   AuditEntry,
@@ -159,6 +160,7 @@ export const api = {
   deletePolicy: (id: string) => request<void>(`policies/${encodeURIComponent(id)}`, { method: "DELETE" }),
   checkPolicies: (agent: string, workflow?: string) =>
     request<PolicyCheckResult>("policies/check", { method: "POST", body: json({ agent, workflow: workflow || null }) }),
+  network: (days = 30) => request<AgentNetwork>(`network${qs({ days })}`),
   auditLogs: (params: { resource_type?: string; limit?: number } = {}) =>
     request<Page<AuditEntry>>(`audit-logs${qs(params)}`),
 };
