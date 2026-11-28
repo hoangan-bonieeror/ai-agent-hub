@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     enable_fake_runtime: bool = False
     fake_runtime_delay_seconds: float = 1.0
 
+    # Built dashboard (`npm run build` in frontend/). When the folder exists the
+    # API also serves the dashboard at "/". Relative paths are from the repo root.
+    frontend_dist_dir: str = "frontend/dist"
+
 
 @lru_cache
 def get_settings() -> Settings:
