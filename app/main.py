@@ -7,6 +7,7 @@ from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.database import get_engine
 from app.core.redis import close_redis
+from app.frontend import mount_dashboard
 from app.orchestrator.runner import get_run_manager
 
 
@@ -23,6 +24,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
     app.include_router(health_router)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
+    mount_dashboard(app, settings.frontend_dist_dir)  # last: its catch-all route goes after the API
     return app
 
 

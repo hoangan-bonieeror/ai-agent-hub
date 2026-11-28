@@ -3,9 +3,10 @@
 A central hub to register, configure, run and orchestrate specialist AI agents.
 Architecture and roadmap: see the project's *AI Agent Hub Architecture and Implementation Plan*.
 
-Built so far: Phase 1 (FastAPI, PostgreSQL, Agent Registry, runtime adapters, workflow API)
-and Phase 2 (multi-agent workflows: dependencies, parallel steps, reviewer and aggregator
-steps, live progress over Server-Sent Events, run/task/execution status).
+Built so far: Phase 1 (FastAPI, PostgreSQL, Agent Registry, runtime adapters, workflow API),
+Phase 2 (multi-agent workflows: dependencies, parallel steps, reviewer and aggregator
+steps, live progress over Server-Sent Events, run/task/execution status) and, from Phase 3,
+the web dashboard with a visual workflow builder.
 
 Commands below are for Windows PowerShell. On macOS/Linux use `source .venv/bin/activate`,
 `cp` instead of `Copy-Item`, and `export NAME=value` instead of `$env:NAME = "value"`.
@@ -17,7 +18,8 @@ Copy-Item .env.example .env   # optional; add OPENAI_API_KEY when needed
 docker compose up --build
 ```
 
-- API: http://localhost:8000 (OpenAPI docs at `/docs`)
+- Dashboard: http://localhost:8000 (the image builds it; see [Dashboard](#dashboard))
+- API: http://localhost:8000/api/v1 (OpenAPI docs at `/docs`)
 - Liveness: `GET /health`
 - Readiness (checks PostgreSQL and Redis): `GET /health/ready`
 
@@ -58,6 +60,45 @@ For real agents, seed without `--runtime fake` and set `OPENAI_API_KEY`.
 
 `python scripts\run_sample_workflow.py --workflow research-and-report` runs the same
 workflow in-process, with no server or database, and prints its events.
+
+## Dashboard
+
+A React + TypeScript app in `frontend/`. It needs [Node.js 22 LTS](https://nodejs.org)
+(`node -v` should print v22 or newer) when you run it outside Docker.
+
+| Page | What you can do |
+| --- | --- |
+| Overview | Counts, success rate, runs in progress and the latest runs. |
+| Agents | List, search and filter agents; create and edit them (each change is a new version); see every version; enable, disable or archive; try an agent with a one-off task. |
+| Workflows | See each workflow as a graph; run it with JSON input; switch between versions. |
+| Workflow builder | Add agent, review and aggregate steps, connect them with "runs after", and watch the graph update. Mistakes (cycles, missing agents, unknown steps) are flagged before saving. A JSON tab edits the raw definition. Editing a workflow saves a new version. |
+| Runs | Filter by workflow and status. A run's page follows it live over SSE: each step's status on the graph, outputs, attempts, token usage, execution logs, the event log, and a Cancel button. |
+
+**One URL (after a build).** Build once, and `uvicorn` serves the dashboard at
+http://localhost:8000 next to the API:
+
+```powershell
+cd frontend
+npm install
+npm run build        # writes frontend\dist, which the API serves
+cd ..
+uvicorn app.main:app --reload
+```
+
+**While changing the dashboard.** Run the dev server with hot reload next to `uvicorn`; it
+forwards `/api` calls to port 8000:
+
+```powershell
+cd frontend
+npm run dev          # http://localhost:5173
+```
+
+Set `$env:HUB_API_URL = "http://localhost:9000"` first if the API is on another port.
+`npm test` runs the dashboard's unit tests and `npm run typecheck` the TypeScript checks.
+
+The dashboard sends `X-Actor: dashboard` with its requests, so agent versions and runs it
+creates show "dashboard" as their author. There is no login yet (Phase 4: auth and RBAC), so
+do not expose port 8000 beyond your machine.
 
 ## Tests
 
@@ -136,7 +177,7 @@ after they finish. Run a single API worker; a shared queue and worker pool come 
 app/
   main.py               FastAPI app factory, routers, lifespan
   api/health.py         /health and /health/ready
-  api/v1/               agents, workflows, runs, tasks, executions (plan section 8)
+  api/v1/               agents, workflows, runs, tasks, executions, runtimes (plan section 8)
   core/                 config (env settings), database (Base, engine, session), redis, security, permissions
   models/               SQLAlchemy models (plan section 6)
   repositories/         data access
@@ -147,7 +188,7 @@ app/
 migrations/             Alembic (async); env.py imports app.models for autogenerate
 scripts/                seed_samples.py (load samples via the API), run_sample_workflow.py (in-process demo)
 tests/
-frontend/               React + TypeScript dashboard (Phase 3)
+frontend/               React + TypeScript dashboard (Vite); `app/frontend.py` serves its build
 ```
 
 Secrets (API keys) come from environment variables only; never store them in agent config rows.
