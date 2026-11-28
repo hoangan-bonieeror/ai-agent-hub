@@ -5,6 +5,8 @@ import type {
   AgentVersion,
   Execution,
   McpServerInput,
+  MemoryInput,
+  MemoryItem,
   McpServerRow,
   Page,
   Readiness,
@@ -128,6 +130,12 @@ export const api = {
     request<McpServerRow>(`mcp-servers/${encodeURIComponent(name)}`, { method: "PATCH", body: json(body) }),
   deleteMcpServer: (name: string) =>
     request<void>(`mcp-servers/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  listMemories: (params: { q?: string; agent?: string; scope?: string; limit?: number; offset?: number } = {}) =>
+    request<Page<MemoryItem>>(`memories${qs(params)}`),
+  createMemory: (body: MemoryInput) => request<MemoryItem>("memories", { method: "POST", body: json(body) }),
+  updateMemory: (id: string, body: MemoryInput) =>
+    request<MemoryItem>(`memories/${encodeURIComponent(id)}`, { method: "PATCH", body: json(body) }),
+  deleteMemory: (id: string) => request<void>(`memories/${encodeURIComponent(id)}`, { method: "DELETE" }),
   discoverMcpServer: (name: string) =>
     request<McpServerRow>(`mcp-servers/${encodeURIComponent(name)}/discover`, { method: "POST" }),
 };

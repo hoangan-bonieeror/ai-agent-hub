@@ -1,1 +1,1 @@
-"""Placeholder package (plan section 13). Filled in by later phases."""
+"""Memory service: notes agents keep between runs. See :mod:`app.memory.store`."""

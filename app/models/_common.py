@@ -35,6 +35,7 @@ TASK_STATUSES = ("pending", "queued", "running", "succeeded", "failed", "cancell
 EXECUTION_STATUSES = ("running", "succeeded", "failed", "timed_out", "cancelled")
 STEP_KINDS = ("agent", "review", "aggregate")
 MCP_TRANSPORTS = ("stdio", "streamable_http", "sse")
+MEMORY_SCOPES = ("agent", "shared")
 
 
 def in_list(column: str, values: tuple[str, ...]) -> str:

@@ -12,6 +12,8 @@ from agents import Agent, ModelProvider, RunConfig, Runner, Tool, WebSearchTool
 from agents.exceptions import AgentsException, MaxTurnsExceeded
 from agents.mcp import MCPServer
 
+from app.memory.store import MemoryStore
+from app.memory.tools import MEMORY_GRANT, memory_tools
 from app.runtimes.base import AgentConfig, AgentResult, AgentResultStatus, AgentRuntime, TokenUsage
 from app.runtimes.prompting import render_task_input
 from app.tools.mcp import (
@@ -47,6 +49,7 @@ class OpenAIAgentRuntime(AgentRuntime):
     * Tools named ``mcp:<server>`` or ``mcp:<server>/<tool>`` come from MCP
       servers looked up in ``mcp_servers``. Each run connects to the servers it
       needs and disconnects when it ends. Only the granted tools are exposed.
+    * ``memory`` grants ``memory_search`` and ``memory_save`` on ``memory``.
     """
 
     name = "openai_agents"
@@ -60,6 +63,7 @@ class OpenAIAgentRuntime(AgentRuntime):
         tracing_disabled: bool = False,
         mcp_servers: McpServerStore | None = None,
         allow_stdio_mcp: bool = False,
+        memory: MemoryStore | None = None,
     ) -> None:
         self.default_model = default_model
         self.tool_factories = dict(
@@ -69,12 +73,20 @@ class OpenAIAgentRuntime(AgentRuntime):
         self.tracing_disabled = tracing_disabled
         self.mcp_servers = mcp_servers
         self.allow_stdio_mcp = allow_stdio_mcp
+        self.memory = memory
 
     def build_agent(self, config: AgentConfig, mcp_servers: list[MCPServer] | None = None) -> Agent:
         tools: list[Tool] = []
         for tool_name in config.tools:
             if is_mcp_ref(tool_name):
                 continue  # served by mcp_servers
+            if tool_name == MEMORY_GRANT:
+                if self.memory is None:
+                    raise UnknownToolError(
+                        f"Agent '{config.id}' requests memory, but no memory store is configured"
+                    )
+                tools.extend(memory_tools(self.memory, config.id))
+                continue
             factory = self.tool_factories.get(tool_name)
             if factory is None:
                 raise UnknownToolError(
