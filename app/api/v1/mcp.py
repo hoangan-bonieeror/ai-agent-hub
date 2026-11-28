@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.agents import ActorDep
 from app.core.config import get_settings
 from app.core.database import get_session
+from app.memory.tools import MEMORY_GRANT
 from app.models import AuditLog, McpServer, Tool
 from app.runtimes.openai_runtime import DEFAULT_TOOL_FACTORIES
 from app.tools.mcp import (
@@ -27,7 +28,10 @@ from app.tools.mcp import (
 router = APIRouter(tags=["tools"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
-BUILTIN_TOOL_DESCRIPTIONS = {"web_search": "Search the web (OpenAI hosted tool)."}
+BUILTIN_TOOL_DESCRIPTIONS = {
+    "web_search": "Search the web (OpenAI hosted tool).",
+    "memory": "memory_search and memory_save: the agent's own and shared notes from earlier runs.",
+}
 
 
 class McpServerUpdate(BaseModel):
@@ -241,7 +245,7 @@ async def list_tools(session: SessionDep) -> dict:
             "input_schema": None,
             "enabled": True,
         }
-        for name in sorted(DEFAULT_TOOL_FACTORIES)
+        for name in sorted([*DEFAULT_TOOL_FACTORIES, MEMORY_GRANT])
     ]
     servers = {s.id: s for s in await session.scalars(select(McpServer).order_by(McpServer.name))}
     for server in servers.values():

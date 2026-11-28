@@ -994,3 +994,38 @@ textarea.input {
   gap: 6px;
   margin-top: 6px;
 }
+
+.memories {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.memory {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.memory:last-child {
+  border-bottom: 0;
+}
+.memory-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.memory-actions {
+  margin-left: auto;
+  display: flex;
+}
+.memory-content {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tag-shared {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+}

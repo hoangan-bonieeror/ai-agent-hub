@@ -7,6 +7,7 @@ from functools import lru_cache
 from agents import set_default_openai_key
 
 from app.core.config import get_settings
+from app.memory.store import DbMemoryStore
 from app.runtimes import RuntimeRegistry
 from app.runtimes.fake_runtime import FakeAgentRuntime
 from app.runtimes.openai_runtime import OpenAIAgentRuntime
@@ -24,7 +25,9 @@ def get_runtime_registry() -> RuntimeRegistry:
     runtimes = RuntimeRegistry(
         [
             OpenAIAgentRuntime(
-                mcp_servers=DbMcpServerStore(), allow_stdio_mcp=settings.mcp_allow_stdio
+                mcp_servers=DbMcpServerStore(),
+                allow_stdio_mcp=settings.mcp_allow_stdio,
+                memory=DbMemoryStore(),
             )
         ]
     )

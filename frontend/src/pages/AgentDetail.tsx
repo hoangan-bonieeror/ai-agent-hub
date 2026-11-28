@@ -88,6 +88,14 @@ export function AgentDetailPage() {
               <dd>
                 <Tags items={a.tools} empty="None (no tool calls allowed)" />
               </dd>
+              {a.tools.includes("memory") && (
+                <>
+                  <dt>Memory</dt>
+                  <dd>
+                    <Link to={`/memory?agent=${a.slug}`}>See what it can recall →</Link>
+                  </dd>
+                </>
+              )}
               <dt>Limits</dt>
               <dd>
                 {a.limits.max_steps} steps, {a.limits.timeout_seconds} s timeout

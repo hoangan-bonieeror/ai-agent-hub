@@ -6,7 +6,7 @@ Architecture and roadmap: see the project's *AI Agent Hub Architecture and Imple
 Built so far: Phase 1 (FastAPI, PostgreSQL, Agent Registry, runtime adapters, workflow API),
 Phase 2 (multi-agent workflows: dependencies, parallel steps, reviewer and aggregator
 steps, live progress over Server-Sent Events, run/task/execution status) and, from Phase 3,
-the web dashboard with a visual workflow builder and MCP tool servers.
+the web dashboard with a visual workflow builder, MCP tool servers and a memory service.
 
 Commands below are for Windows PowerShell. On macOS/Linux use `source .venv/bin/activate`,
 `cp` instead of `Copy-Item`, and `export NAME=value` instead of `$env:NAME = "value"`.
@@ -73,6 +73,7 @@ A React + TypeScript app in `frontend/`. It needs [Node.js 22 LTS](https://nodej
 | Workflows | See each workflow as a graph; run it with JSON input; switch between versions. |
 | Workflow builder | Add agent, review and aggregate steps, connect them with "runs after", and watch the graph update. Mistakes (cycles, missing agents, unknown steps) are flagged before saving. A JSON tab edits the raw definition. Editing a workflow saves a new version. |
 | Tools | Add MCP servers, discover their tools, limit which tools agents may get. |
+| Memory | Search, add, edit and delete the notes agents keep between runs. |
 | Runs | Filter by workflow and status. A run's page follows it live over SSE: each step's status on the graph, outputs, attempts, token usage, execution logs, the event log, and a Cancel button. |
 
 **One URL (after a build).** Build once, and `uvicorn` serves the dashboard at
@@ -108,6 +109,7 @@ Agents only get the tools named in their `tools` list; anything else is denied.
 | Name in `tools` | Grants |
 | --- | --- |
 | `web_search` | The built-in OpenAI web search tool. |
+| `memory` | `memory_search` and `memory_save` (see [Memory](#memory)). |
 | `mcp:<server>` | Every tool the MCP server allows. |
 | `mcp:<server>/<tool>` | One tool of that server. |
 
@@ -139,6 +141,24 @@ Secrets never go into a server's stored config. `env_from_host` lists names of e
 variables the Hub passes to a stdio server (for example `["GITHUB_TOKEN"]`), and
 `headers_from_env` maps an HTTP header to the variable holding its value
 (`{"Authorization": "MCP_AUTH_HEADER"}`). Set those variables in `.env`.
+
+## Memory
+
+Agents with `memory` in their tools get two tools: `memory_search` (look up notes from
+earlier runs) and `memory_save` (keep a fact or lesson). A note is either private to the
+agent that saved it or shared with every agent that has memory access, and can expire.
+Agents never read another agent's private notes.
+
+People manage memory on the dashboard's **Memory** page or through the API:
+
+| Method | Endpoint | What it does |
+| --- | --- | --- |
+| GET | `/api/v1/memories?q=...&agent=...&scope=...` | Search (best match first) or list. `agent` limits to what that agent can read. |
+| POST | `/api/v1/memories` | `{"content": "...", "scope": "shared"}`, or `"scope": "agent", "owner": "<slug>"`. Optional `tags`, `expires_at`. |
+| PATCH / DELETE | `/api/v1/memories/{id}` | Change `content`, `tags`, `expires_at`, or delete. |
+
+Search uses PostgreSQL full-text search without stemming, so Vietnamese and English both
+work, plus a substring match for partial words. No extra service or API key is needed.
 
 ## Tests
 
@@ -225,7 +245,8 @@ app/
   orchestrator/         workflow graph, engine (parallel DAG), review, run recorder, SSE broker, runner
   runtimes/             AgentRuntime interface and adapters (plan section 9)
   tools/mcp.py          MCP server specs, tool grants, connecting and discovering tools
-  workflows/ memory/ observability/ schemas/   placeholders for later phases
+  memory/               memory store (PostgreSQL full-text search) and the agents' memory tools
+  workflows/ observability/ schemas/   placeholders for later phases
 migrations/             Alembic (async); env.py imports app.models for autogenerate
 scripts/                seed_samples.py (load samples via the API), run_sample_workflow.py (in-process demo)
 tests/

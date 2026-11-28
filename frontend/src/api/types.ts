@@ -244,3 +244,23 @@ export interface McpServerRow {
   created_at: string;
   updated_at: string;
 }
+
+export interface MemoryItem {
+  id: string;
+  scope: "agent" | "shared";
+  owner: string | null;
+  content: string;
+  tags: string[];
+  created_by: string | null;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MemoryInput {
+  content?: string;
+  scope?: "agent" | "shared";
+  owner?: string | null;
+  tags?: string[];
+  expires_at?: string | null;
+}

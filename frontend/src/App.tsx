@@ -4,6 +4,7 @@ import { useApi } from "./hooks/useApi";
 import { AgentDetailPage } from "./pages/AgentDetail";
 import { AgentFormPage } from "./pages/AgentForm";
 import { AgentsPage } from "./pages/Agents";
+import { MemoryPage } from "./pages/Memory";
 import { NotFoundPage } from "./pages/NotFound";
 import { OverviewPage } from "./pages/Overview";
 import { RunDetailPage } from "./pages/RunDetail";
@@ -19,6 +20,7 @@ const NAV = [
   { to: "/workflows", label: "Workflows" },
   { to: "/runs", label: "Runs" },
   { to: "/tools", label: "Tools" },
+  { to: "/memory", label: "Memory" },
 ];
 
 export function App() {
@@ -57,6 +59,7 @@ export function App() {
           <Route path="/runs" element={<RunsPage />} />
           <Route path="/runs/:id" element={<RunDetailPage />} />
           <Route path="/tools" element={<ToolsPage />} />
+          <Route path="/memory" element={<MemoryPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>
