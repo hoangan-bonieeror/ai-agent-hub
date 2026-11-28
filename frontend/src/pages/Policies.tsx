@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { AuditEntry, BudgetRules, Policy, PolicyCheckResult, PolicyKind, PolicyScope } from "../api/types";
 import { Card, Empty, ErrorBox, Loading, PageHeader, Tags } from "../components/ui";
+import { useConfirm } from "../components/motion";
 import { useApi } from "../hooks/useApi";
 import { dateTime, money, splitList, timeAgo } from "../lib/format";
 
@@ -92,6 +93,7 @@ export function PoliciesPage() {
 }
 
 function PolicyRow({ policy: p, onChange }: { policy: Policy; onChange: () => void }) {
+  const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const act = async (fn: () => Promise<unknown>) => {
@@ -124,7 +126,9 @@ function PolicyRow({ policy: p, onChange }: { policy: Policy; onChange: () => vo
             className="btn btn-ghost btn-small danger"
             disabled={busy}
             onClick={() => {
-              if (window.confirm(`Delete policy ${p.name}?`)) void act(() => api.deletePolicy(p.id));
+              void confirm(`Delete policy ${p.name}? It stops applying right away.`, { confirmLabel: "Delete policy" }).then((ok) => {
+                if (ok) void act(() => api.deletePolicy(p.id));
+              });
             }}
           >
             Delete

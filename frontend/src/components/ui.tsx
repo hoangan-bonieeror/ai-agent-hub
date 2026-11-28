@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { pretty } from "../lib/format";
+import { AnimatedValue, SkeletonPage, SkeletonRows } from "./motion";
 
 export function StatusBadge({ status }: { status: string }) {
   return <span className={`badge badge-${status}`}>{status.replace(/_/g, " ")}</span>;
@@ -31,8 +32,14 @@ export function ErrorBox({ error, onRetry }: { error: Error | string | undefined
   );
 }
 
-export function Loading({ label = "Loading…" }: { label?: string }) {
-  return <div className="loading">{label}</div>;
+/** Shimmering placeholder while data loads; `page` for a whole page. */
+export function Loading({ label = "Loading…", page, rows }: { label?: string; page?: boolean; rows?: number }) {
+  return (
+    <div className="loading" role="status" aria-busy="true">
+      <span className="sr-only">{label}</span>
+      {page ? <SkeletonPage /> : <SkeletonRows rows={rows} />}
+    </div>
+  );
 }
 
 export function Empty({ title, children }: { title: string; children?: ReactNode }) {
@@ -86,7 +93,9 @@ export function Stat({ label, value, hint }: { label: string; value: ReactNode; 
   return (
     <div className="stat">
       <div className="stat-label">{label}</div>
-      <div className="stat-value">{value}</div>
+      <div className="stat-value">
+        <AnimatedValue value={value} />
+      </div>
       {hint && <div className="stat-hint">{hint}</div>}
     </div>
   );

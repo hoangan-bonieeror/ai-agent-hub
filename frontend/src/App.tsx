@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
+import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { api } from "./api/client";
 import { useApi } from "./hooks/useApi";
 import { AgentDetailPage } from "./pages/AgentDetail";
@@ -31,6 +31,7 @@ const NAV = [
 ];
 
 export function App() {
+  const location = useLocation();
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -54,25 +55,28 @@ export function App() {
         </div>
       </aside>
       <main className="content">
-        <Routes>
-          <Route path="/" element={<OverviewPage />} />
-          <Route path="/network" element={<NetworkPage />} />
-          <Route path="/agents" element={<AgentsPage />} />
-          <Route path="/agents/new" element={<AgentFormPage />} />
-          <Route path="/agents/:id" element={<AgentDetailPage />} />
-          <Route path="/agents/:id/edit" element={<AgentFormPage />} />
-          <Route path="/workflows" element={<WorkflowsPage />} />
-          <Route path="/workflows/new" element={<WorkflowBuilderPage />} />
-          <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
-          <Route path="/workflows/:id/edit" element={<WorkflowBuilderPage />} />
-          <Route path="/runs" element={<RunsPage />} />
-          <Route path="/runs/:id" element={<RunDetailPage />} />
-          <Route path="/tools" element={<ToolsPage />} />
-          <Route path="/memory" element={<MemoryPage />} />
-          <Route path="/costs" element={<CostsPage />} />
-          <Route path="/policies" element={<PoliciesPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+        {/* keyed by path so each page plays its entrance */}
+        <div className="page" key={location.pathname}>
+          <Routes>
+            <Route path="/" element={<OverviewPage />} />
+            <Route path="/network" element={<NetworkPage />} />
+            <Route path="/agents" element={<AgentsPage />} />
+            <Route path="/agents/new" element={<AgentFormPage />} />
+            <Route path="/agents/:id" element={<AgentDetailPage />} />
+            <Route path="/agents/:id/edit" element={<AgentFormPage />} />
+            <Route path="/workflows" element={<WorkflowsPage />} />
+            <Route path="/workflows/new" element={<WorkflowBuilderPage />} />
+            <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
+            <Route path="/workflows/:id/edit" element={<WorkflowBuilderPage />} />
+            <Route path="/runs" element={<RunsPage />} />
+            <Route path="/runs/:id" element={<RunDetailPage />} />
+            <Route path="/tools" element={<ToolsPage />} />
+            <Route path="/memory" element={<MemoryPage />} />
+            <Route path="/costs" element={<CostsPage />} />
+            <Route path="/policies" element={<PoliciesPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </div>
       </main>
     </div>
   );
@@ -104,7 +108,13 @@ function readTheme(): Theme {
 function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>(readTheme);
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    const root = document.documentElement;
+    if (root.dataset.theme && root.dataset.theme !== theme) {
+      // cross-fade colours instead of snapping
+      root.classList.add("theme-fade");
+      window.setTimeout(() => root.classList.remove("theme-fade"), 450);
+    }
+    root.dataset.theme = theme;
     try {
       localStorage.setItem("hub-theme", theme);
     } catch {

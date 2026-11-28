@@ -70,7 +70,7 @@ A React + TypeScript app in `frontend/`. It needs [Node.js 22 LTS](https://nodej
 | Page | What you can do |
 | --- | --- |
 | Overview | Counts, success rate, a live view of the agent network, and the latest runs. |
-| Network | Agents as neurons around the hub. Agents that ran in the same workflow runs are wired together (thicker, brighter wires for more shared runs), signals travel along the wires, working agents glow and send steady signals, agents whose last step failed glow red, and small sparks show their memories. Hover for details, click to open the agent. Data comes from `GET /api/v1/network?days=30`. |
+| Network | Agents as neurons around the hub. Agents that ran in the same workflow runs are wired together (thicker, brighter wires for more shared runs), signals travel along the wires, working agents glow and send steady signals, agents whose last step failed glow red, and small sparks show their memories. Hover for details, click to open the agent; drag to move, Ctrl + scroll, double-click or the +/− buttons to zoom. Data comes from `GET /api/v1/network?days=30`. |
 | Agents | List, search and filter agents; create and edit them (each change is a new version); see every version; enable, disable or archive; try an agent with a one-off task. |
 | Workflows | See each workflow as a graph; run it with JSON input; switch between versions. |
 | Workflow builder | Add agent, review and aggregate steps, connect them with "runs after", and watch the graph update. Mistakes (cycles, missing agents, unknown steps) are flagged before saving. A JSON tab edits the raw definition. Editing a workflow saves a new version. |
@@ -101,7 +101,9 @@ npm run dev          # http://localhost:5173
 
 Set `$env:HUB_API_URL = "http://localhost:9000"` first if the API is on another port.
 The dashboard uses the dark "neural" look by default; "Light theme" at the bottom of the
-sidebar switches to a light one (remembered per browser).
+sidebar switches to a light one (remembered per browser). Pages, lists and panels animate in,
+numbers count up, loading shows shimmering placeholders and confirmations use an animated
+dialog; all of it turns off when the OS "reduce motion" setting is on.
 `npm test` runs the dashboard's unit tests and `npm run typecheck` the TypeScript checks.
 
 The dashboard sends `X-Actor: dashboard` with its requests, so agent versions and runs it

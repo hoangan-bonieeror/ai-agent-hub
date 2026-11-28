@@ -34,7 +34,7 @@ export function WorkflowBuilderPage() {
   const problems = useMemo(() => validateDefinition(def), [def]);
   const flagged = useMemo(() => new Set(problems.map((p) => p.stepId).filter(Boolean) as string[]), [problems]);
 
-  if (id && source.loading && !source.data) return <Loading />;
+  if (id && source.loading && !source.data) return <Loading page />;
   if (id && source.error) return <ErrorBox error={source.error} onRetry={source.reload} />;
 
   const setStep = (index: number, patch: Partial<WorkflowStep>) =>
