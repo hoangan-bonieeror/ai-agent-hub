@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { MemoryItem } from "../api/types";
 import { Card, Empty, ErrorBox, Loading, PageHeader, Tags } from "../components/ui";
+import { useConfirm } from "../components/motion";
 import { useApi } from "../hooks/useApi";
 import { dateTime, splitList, timeAgo } from "../lib/format";
 
@@ -121,6 +122,7 @@ export function MemoryPage() {
 }
 
 function MemoryRow({ memory, onChange }: { memory: MemoryItem; onChange: () => void }) {
+  const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
   const [content, setContent] = useState(memory.content);
   const [tags, setTags] = useState(memory.tags.join(", "));
@@ -162,7 +164,9 @@ function MemoryRow({ memory, onChange }: { memory: MemoryItem; onChange: () => v
             className="btn btn-ghost btn-small danger"
             disabled={busy}
             onClick={() => {
-              if (window.confirm("Delete this memory? Agents will no longer find it.")) void run(() => api.deleteMemory(memory.id));
+              void confirm("Delete this memory? Agents will no longer find it.", { confirmLabel: "Delete memory" }).then((ok) => {
+                if (ok) void run(() => api.deleteMemory(memory.id));
+              });
             }}
           >
             Delete

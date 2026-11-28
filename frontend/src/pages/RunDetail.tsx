@@ -51,7 +51,7 @@ export function RunDetailPage() {
     [run.data],
   );
 
-  if (run.loading && !run.data) return <Loading />;
+  if (run.loading && !run.data) return <Loading page />;
   if (run.error && !run.data) return <ErrorBox error={run.error} onRetry={run.reload} />;
   const r = run.data as RunDetail;
   const tasks = r.tasks;
@@ -124,7 +124,7 @@ export function RunDetailPage() {
             </span>
           ))}
         </div>
-        {task ? <TaskPanel task={task} /> : <p className="muted small">Click a step to see its output, attempts and logs.</p>}
+        {task ? <TaskPanel key={task.task_id} task={task} /> : <p className="muted small">Click a step to see its output, attempts and logs.</p>}
       </Card>
 
       <div className="grid-2">

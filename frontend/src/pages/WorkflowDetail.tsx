@@ -16,7 +16,7 @@ export function WorkflowDetailPage() {
   const runs = useApi(() => (name ? api.listRuns({ workflow: name, limit: 10 }) : Promise.resolve(undefined)), [name], 5000);
   const [selected, setSelected] = useState<string | null>(null);
 
-  if (workflow.loading && !workflow.data) return <Loading />;
+  if (workflow.loading && !workflow.data) return <Loading page />;
   if (workflow.error || !workflow.data) return <ErrorBox error={workflow.error ?? "Workflow not found"} onRetry={workflow.reload} />;
   const w = workflow.data;
   const steps = w.definition.steps;

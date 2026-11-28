@@ -3,10 +3,12 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { AgentResult } from "../api/types";
 import { Card, ErrorBox, JsonBlock, Loading, PageHeader, StatusBadge, Tags } from "../components/ui";
+import { useConfirm } from "../components/motion";
 import { useApi } from "../hooks/useApi";
 import { dateTime, duration, money, number, timeAgo } from "../lib/format";
 
 export function AgentDetailPage() {
+  const confirm = useConfirm();
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const agent = useApi(() => api.getAgent(id), [id]);
@@ -15,7 +17,7 @@ export function AgentDetailPage() {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string>();
 
-  if (agent.loading && !agent.data) return <Loading />;
+  if (agent.loading && !agent.data) return <Loading page />;
   if (agent.error || !agent.data) return <ErrorBox error={agent.error ?? "Agent not found"} onRetry={agent.reload} />;
   const a = agent.data;
   const archived = a.status === "archived";
@@ -56,9 +58,11 @@ export function AgentDetailPage() {
                 className="btn btn-danger"
                 disabled={busy}
                 onClick={() => {
-                  if (window.confirm(`Archive ${a.name}? It disappears from lists; its history is kept and the slug stays reserved.`)) {
-                    void act(() => api.archiveAgent(a.slug), () => navigate("/agents"));
-                  }
+                  void confirm(`Archive ${a.name}? It disappears from lists; its history is kept and the slug stays reserved.`, {
+                    confirmLabel: "Archive agent",
+                  }).then((ok) => {
+                    if (ok) void act(() => api.archiveAgent(a.slug), () => navigate("/agents"));
+                  });
                 }}
               >
                 Archive

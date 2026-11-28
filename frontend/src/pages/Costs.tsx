@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import type { CostGroup, ModelPrice } from "../api/types";
 import { SpendChart } from "../components/SpendChart";
 import { Card, Empty, ErrorBox, Loading, PageHeader, Stat } from "../components/ui";
+import { useConfirm } from "../components/motion";
 import { useApi } from "../hooks/useApi";
 import { money, number } from "../lib/format";
 
@@ -136,6 +137,7 @@ function GroupTable({ rows, total, empty = "—", link }: { rows: CostGroup[]; t
 }
 
 function Prices({ prices, error, reload }: { prices?: ModelPrice[]; error?: Error; reload: () => void }) {
+  const confirm = useConfirm();
   const [model, setModel] = useState("");
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
@@ -219,7 +221,9 @@ function Prices({ prices, error, reload }: { prices?: ModelPrice[]; error?: Erro
                       className="btn btn-ghost btn-small danger"
                       disabled={busy}
                       onClick={() => {
-                        if (window.confirm(`Remove the price of ${p.model}? New calls to it will count as $0.`)) void act(() => api.deletePrice(p.id));
+                        void confirm(`Remove the price of ${p.model}? New calls to it will count as $0.`, { confirmLabel: "Remove price" }).then((ok) => {
+                          if (ok) void act(() => api.deletePrice(p.id));
+                        });
                       }}
                     >
                       Remove

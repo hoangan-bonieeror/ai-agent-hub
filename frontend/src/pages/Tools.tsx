@@ -2,6 +2,7 @@ import { Fragment, useState, type FormEvent } from "react";
 import { api } from "../api/client";
 import type { McpServerInput, McpServerRow, McpTransport, RegistryTool } from "../api/types";
 import { Card, Empty, ErrorBox, JsonBlock, Loading, PageHeader, StatusBadge, Tags } from "../components/ui";
+import { useConfirm } from "../components/motion";
 import { useApi } from "../hooks/useApi";
 import { splitList, timeAgo } from "../lib/format";
 
@@ -57,6 +58,7 @@ export function ToolsPage() {
 }
 
 function ServerCard({ server, onChange }: { server: McpServerRow; onChange: () => void }) {
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState<string>();
@@ -107,9 +109,11 @@ function ServerCard({ server, onChange }: { server: McpServerRow; onChange: () =
             className="btn btn-small btn-danger"
             disabled={!!busy}
             onClick={() => {
-              if (window.confirm(`Remove MCP server ${server.name} and its ${server.tool_count} tools? Agents that use it will fail until you change them.`)) {
-                void act("delete", () => api.deleteMcpServer(server.name));
-              }
+              void confirm(`Remove MCP server ${server.name} and its ${server.tool_count} tools? Agents that use it will fail until you change them.`, {
+                confirmLabel: "Remove server",
+              }).then((ok) => {
+                if (ok) void act("delete", () => api.deleteMcpServer(server.name));
+              });
             }}
           >
             Remove

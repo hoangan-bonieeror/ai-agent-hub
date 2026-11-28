@@ -119,7 +119,7 @@ export function AgentFormPage() {
     }
   };
 
-  if (editing && existing.loading && !existing.data) return <Loading />;
+  if (editing && existing.loading && !existing.data) return <Loading page />;
   if (editing && existing.error) return <ErrorBox error={existing.error} onRetry={existing.reload} />;
 
   const knownRuntimes = runtimes.data?.items ?? [];
