@@ -37,6 +37,9 @@ class AgentConfig(BaseModel):
     model: str | None = None
     instructions: str
     tools: list[str] = Field(default_factory=list)
+    #: Tool name patterns the agent may not call even where ``tools`` grants
+    #: them (an MCP server granted as a whole). Set by the policy engine.
+    blocked_tools: list[str] = Field(default_factory=list)
     capabilities: list[str] = Field(default_factory=list)
     limits: AgentLimits = Field(default_factory=AgentLimits)
     enabled: bool = True
@@ -73,6 +76,9 @@ class AgentResult(BaseModel):
     output: Any = None
     error: str | None = None
     usage: TokenUsage = Field(default_factory=TokenUsage)
+    #: Model the call used, for cost tracking. The orchestrator fills in the
+    #: agent's configured model when the runtime leaves it empty.
+    model: str | None = None
     duration_ms: int = 0
     metadata: dict[str, Any] = Field(default_factory=dict)
 

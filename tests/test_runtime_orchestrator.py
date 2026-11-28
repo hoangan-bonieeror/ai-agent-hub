@@ -336,7 +336,7 @@ def test_runtimes_are_swappable_per_agent():
         result.tasks[0].result.runtime == "openai_agents"
         and result.tasks[1].result.runtime == "fake"
     )
-    assert result.usage.total_tokens == 15
+    assert result.tasks[0].result.usage.total_tokens == 15  # the fake runtime only estimates
 
 
 def test_sample_workflow_end_to_end_through_openai_adapter():

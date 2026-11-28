@@ -8,7 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.orchestrator import AgentOrchestrator, AgentUnavailableError
-from app.orchestrator.dependencies import get_runtime_registry
+from app.orchestrator.dependencies import get_policy_engine, get_runtime_registry
+from app.orchestrator.persistence import direct_execution
+from app.policy.engine import PolicyDenied, PolicyEngine
+from app.policy.pricing import load_price_book
 from app.registry.agent_registry import AgentRegistry
 from app.repositories.agent_repository import (
     AgentConflictError,
@@ -155,10 +158,13 @@ async def run_agent(
     body: AgentRunRequest,
     session: SessionDep,
     runtimes: Annotated[RuntimeRegistry, Depends(get_runtime_registry)],
+    policy: Annotated[PolicyEngine, Depends(get_policy_engine)],
 ) -> dict[str, Any]:
     """Runs one agent directly and waits for its result. Agent failures
-    (timeout, step limit, model error) return 200 with a non-completed status."""
-    orchestrator = AgentOrchestrator(AgentRegistry(session), runtimes)
+    (timeout, step limit, model error) return 200 with a non-completed status.
+    A policy that refuses the call (budget reached, model not allowed) returns 403.
+    The call is recorded as an execution, with its cost."""
+    orchestrator = AgentOrchestrator(AgentRegistry(session), runtimes, policy=policy)
     try:
         result = await orchestrator.execute_task(agent_id, {"task": body.task, **body.input})
     except AgentNotFoundError as exc:
@@ -166,5 +172,21 @@ async def run_agent(
     except AgentUnavailableError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except RuntimeNotFoundError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    return result.model_dump(mode="json")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    except PolicyDenied as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    agent = await AgentRepository(session).get(agent_id, include_archived=True)
+    execution = direct_execution(
+        result,
+        agent_id=agent.id,
+        agent_version=agent.current_version,
+        prices=await load_price_book(session),
+    )
+    session.add(execution)
+    await session.commit()
+    return {
+        **result.model_dump(mode="json"),
+        "execution_id": str(execution.id),
+        "cost_usd": None if execution.cost_usd is None else float(execution.cost_usd),
+    }

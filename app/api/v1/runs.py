@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import AsyncIterator
+from decimal import Decimal
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
@@ -96,6 +97,8 @@ def execution_summary(row: Execution) -> dict[str, Any]:
         "completed_at": row.completed_at,
         "duration_ms": duration,
         "token_usage": row.token_usage,
+        "model": row.model,
+        "cost_usd": money(row.cost_usd),
         "error": row.error,
     }
 
@@ -118,6 +121,29 @@ def stored_task_view(
         "updated_at": row.updated_at,
         "executions": [execution_summary(e) for e in executions],
     }
+
+
+def money(value: Decimal | None) -> float | None:
+    return None if value is None else float(value)
+
+
+def cost_of(executions: list[Execution]) -> dict[str, Any]:
+    """Total dollar cost; ``unpriced`` counts calls whose model had no price."""
+    priced = [e.cost_usd for e in executions if e.cost_usd is not None]
+    unpriced = sum(1 for e in executions if e.cost_usd is None and e.token_usage)
+    return {"cost_usd": float(sum(priced, Decimal(0))), "unpriced_executions": unpriced}
+
+
+async def run_costs(session: AsyncSession, run_ids: list[uuid.UUID]) -> dict[uuid.UUID, float]:
+    if not run_ids:
+        return {}
+    rows = await session.execute(
+        select(Task.run_id, func.coalesce(func.sum(Execution.cost_usd), 0))
+        .join(Execution, Execution.task_id == Task.id)
+        .where(Task.run_id.in_(run_ids))
+        .group_by(Task.run_id)
+    )
+    return {run_id: float(total) for run_id, total in rows.all()}
 
 
 def usage_of(executions: list[Execution]) -> dict[str, int]:
@@ -164,6 +190,7 @@ async def list_runs(
         stmt = stmt.where(WorkflowRunRow.status == run_status)
     stmt = stmt.order_by(WorkflowRunRow.created_at.desc(), WorkflowRunRow.id).limit(limit)
     rows = (await session.execute(stmt.offset(offset))).all()
+    costs = await run_costs(session, [run.id for run, _ in rows])
     return {
         "items": [
             {
@@ -175,6 +202,7 @@ async def list_runs(
                 "created_at": run.created_at,
                 "started_at": run.started_at,
                 "completed_at": run.completed_at,
+                "cost_usd": costs.get(run.id, 0.0),
                 "links": run_links(str(run.id)),
             }
             for run, wf in rows
@@ -214,6 +242,7 @@ async def get_run(run_id: str, session: SessionDep) -> dict[str, Any]:
         "error": run.error,
         "requested_by": run.requested_by,
         "usage": usage_of(executions),
+        **cost_of(executions),
         "created_at": run.created_at,
         "started_at": run.started_at,
         "completed_at": run.completed_at,

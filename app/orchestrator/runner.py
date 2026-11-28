@@ -19,6 +19,7 @@ from app.orchestrator.engine import AgentOrchestrator
 from app.orchestrator.events import RunEventBroker
 from app.orchestrator.persistence import RunRecorder
 from app.orchestrator.workflow import RunStatus, WorkflowDefinition, WorkflowEvent, WorkflowRun
+from app.policy.engine import PolicyEngine
 from app.registry.agent_registry import AgentRegistry
 from app.runtimes import RuntimeRegistry
 
@@ -41,6 +42,7 @@ class RunManager:
         requested_by: str | None,
         max_parallel: int,
         wait: bool,
+        policy: PolicyEngine | None = None,
     ) -> WorkflowRun:
         """Record the run, then execute it. With ``wait`` the call returns once
         the run has finished; otherwise it returns the pending run at once."""
@@ -52,7 +54,7 @@ class RunManager:
             await recorder.close()
             raise
         self.broker.open(run.id)
-        job = self._execute(sessionmaker, definition, run, runtimes, recorder, max_parallel)
+        job = self._execute(sessionmaker, definition, run, runtimes, recorder, max_parallel, policy)
         if wait:
             await job
         else:
@@ -87,6 +89,7 @@ class RunManager:
         runtimes: RuntimeRegistry,
         recorder: RunRecorder,
         max_parallel: int,
+        policy: PolicyEngine | None = None,
     ) -> None:
         async def on_event(event: WorkflowEvent) -> None:
             await recorder.record(event, run)  # store first: clients may query on the event
@@ -99,6 +102,7 @@ class RunManager:
                     runtimes,
                     on_event=on_event,
                     max_parallel=max_parallel,
+                    policy=policy,
                 )
                 await orchestrator.run_workflow(definition, run.input, run=run)
         except asyncio.CancelledError:

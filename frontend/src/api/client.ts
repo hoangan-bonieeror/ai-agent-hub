@@ -3,12 +3,18 @@ import type {
   AgentInput,
   AgentResult,
   AgentVersion,
+  AuditEntry,
+  CostSummary,
   Execution,
   McpServerInput,
   MemoryInput,
   MemoryItem,
   McpServerRow,
+  ModelPrice,
   Page,
+  Policy,
+  PolicyCheckResult,
+  PolicyInput,
   Readiness,
   RegistryTool,
   RunDetail,
@@ -138,6 +144,23 @@ export const api = {
   deleteMemory: (id: string) => request<void>(`memories/${encodeURIComponent(id)}`, { method: "DELETE" }),
   discoverMcpServer: (name: string) =>
     request<McpServerRow>(`mcp-servers/${encodeURIComponent(name)}/discover`, { method: "POST" }),
+
+  costs: (params: { days?: number; agent?: string; workflow?: string } = {}) => request<CostSummary>(`costs${qs(params)}`),
+  reprice: () => request<{ updated: number }>("costs/reprice", { method: "POST" }),
+  listPrices: () => request<{ items: ModelPrice[] }>("model-prices"),
+  setPrice: (body: { model: string; input_per_mtok: number; output_per_mtok: number }) =>
+    request<ModelPrice>("model-prices", { method: "PUT", body: json(body) }),
+  deletePrice: (id: string) => request<void>(`model-prices/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  listPolicies: () => request<{ items: Policy[] }>("policies"),
+  createPolicy: (body: PolicyInput) => request<Policy>("policies", { method: "POST", body: json(body) }),
+  updatePolicy: (id: string, body: PolicyInput) =>
+    request<Policy>(`policies/${encodeURIComponent(id)}`, { method: "PATCH", body: json(body) }),
+  deletePolicy: (id: string) => request<void>(`policies/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  checkPolicies: (agent: string, workflow?: string) =>
+    request<PolicyCheckResult>("policies/check", { method: "POST", body: json({ agent, workflow: workflow || null }) }),
+  auditLogs: (params: { resource_type?: string; limit?: number } = {}) =>
+    request<Page<AuditEntry>>(`audit-logs${qs(params)}`),
 };
 
 export const runEventsUrl = (runId: string) => `${BASE}/runs/${encodeURIComponent(runId)}/events`;

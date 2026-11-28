@@ -14,7 +14,8 @@ from app.core.config import get_settings
 from app.core.database import get_session, get_sessionmaker
 from app.models import Workflow
 from app.orchestrator import WorkflowDefinition
-from app.orchestrator.dependencies import get_runtime_registry
+from app.orchestrator.dependencies import get_policy_engine, get_runtime_registry
+from app.policy.engine import PolicyEngine
 from app.runtimes import RuntimeRegistry
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -114,6 +115,7 @@ async def run_workflow(
     runtimes: RuntimesDep,
     manager: ManagerDep,
     actor: ActorDep,
+    policy: Annotated[PolicyEngine, Depends(get_policy_engine)],
 ) -> dict[str, Any]:
     """Runs the workflow. Independent steps run in parallel.
 
@@ -136,6 +138,7 @@ async def run_workflow(
         requested_by=actor,
         max_parallel=get_settings().workflow_max_parallel,
         wait=body.wait,
+        policy=policy,
     )
     if not body.wait:
         response.status_code = status.HTTP_202_ACCEPTED

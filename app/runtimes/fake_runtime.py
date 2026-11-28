@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from app.runtimes.base import AgentConfig, AgentResult, AgentResultStatus, AgentRuntime
+from app.runtimes.base import (
+    AgentConfig,
+    AgentResult,
+    AgentResultStatus,
+    AgentRuntime,
+    TokenUsage,
+)
 
 Responder = Callable[[AgentConfig, dict[str, Any]], Any | Awaitable[Any]]
 
@@ -68,5 +75,20 @@ class FakeAgentRuntime(AgentRuntime):
             status=status,
             output=output,
             error=error,
+            usage=estimate_usage(task_input, output),
+            model=agent_config.model,
             duration_ms=int((time.monotonic() - started) * 1000),
         )
+
+
+def estimate_usage(task_input: dict[str, Any], output: Any) -> TokenUsage:
+    """Rough token counts (about 4 characters a token), so cost tracking has
+    something to show when runs use the fake runtime."""
+    input_tokens = max(1, len(json.dumps(task_input, default=str)) // 4)
+    output_tokens = 0 if output is None else max(1, len(json.dumps(output, default=str)) // 4)
+    return TokenUsage(
+        requests=1,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total_tokens=input_tokens + output_tokens,
+    )

@@ -5,8 +5,9 @@ Architecture and roadmap: see the project's *AI Agent Hub Architecture and Imple
 
 Built so far: Phase 1 (FastAPI, PostgreSQL, Agent Registry, runtime adapters, workflow API),
 Phase 2 (multi-agent workflows: dependencies, parallel steps, reviewer and aggregator
-steps, live progress over Server-Sent Events, run/task/execution status) and, from Phase 3,
-the web dashboard with a visual workflow builder, MCP tool servers and a memory service.
+steps, live progress over Server-Sent Events, run/task/execution status) and Phase 3
+(the web dashboard with a visual workflow builder, MCP tool servers, a memory service,
+cost tracking and a policy engine).
 
 Commands below are for Windows PowerShell. On macOS/Linux use `source .venv/bin/activate`,
 `cp` instead of `Copy-Item`, and `export NAME=value` instead of `$env:NAME = "value"`.
@@ -74,6 +75,8 @@ A React + TypeScript app in `frontend/`. It needs [Node.js 22 LTS](https://nodej
 | Workflow builder | Add agent, review and aggregate steps, connect them with "runs after", and watch the graph update. Mistakes (cycles, missing agents, unknown steps) are flagged before saving. A JSON tab edits the raw definition. Editing a workflow saves a new version. |
 | Tools | Add MCP servers, discover their tools, limit which tools agents may get. |
 | Memory | Search, add, edit and delete the notes agents keep between runs. |
+| Costs | Spend per day and by agent, model and workflow; model prices. |
+| Policies | Budgets with what is spent so far, blocked tools, allowed models, a dry-run check and recent changes. |
 | Runs | Filter by workflow and status. A run's page follows it live over SSE: each step's status on the graph, outputs, attempts, token usage, execution logs, the event log, and a Cancel button. |
 
 **One URL (after a build).** Build once, and `uvicorn` serves the dashboard at
@@ -160,6 +163,55 @@ People manage memory on the dashboard's **Memory** page or through the API:
 Search uses PostgreSQL full-text search without stemming, so Vietnamese and English both
 work, plus a substring match for partial words. No extra service or API key is needed.
 
+## Costs and policies
+
+Every agent call is recorded with its token use, model and dollar cost, whether it ran in a
+workflow or directly (`POST /api/v1/agents/{id}/run`). The **Costs** page shows spend per day
+and by agent, model and workflow; runs, agents and the Overview show their spend too.
+
+Costs come from the prices you enter, in US dollars per million tokens. The Hub ships with no
+prices because providers change them: copy them from your provider's price list. Until a model
+has a price its calls count as $0 and the Costs page lists it. A price can cover dated model
+versions with `*`:
+
+```powershell
+$price = @{ model = "gpt-4.1-mini*"; input_per_mtok = 0.40; output_per_mtok = 1.60 } | ConvertTo-Json
+Invoke-RestMethod -Method Put -Uri http://localhost:8000/api/v1/model-prices -ContentType "application/json" -Body $price
+```
+
+A call is priced when it runs, so changing a price later does not rewrite history. **Price past
+calls** (`POST /api/v1/costs/reprice`) prices stored calls that had no price yet.
+
+**Policies** are checked before every agent call. With no policy, nothing is limited. Each
+applies to all agents, to one agent, or to the agents of one workflow:
+
+| Kind | Rules | Effect |
+| --- | --- | --- |
+| `budget` | `limit_usd`, `period` (`day`, `month`, `total`), `action` (`block`, `warn`) | Once spend in the period reaches the limit, calls are refused (direct runs get 403, the workflow step fails) or run with a warning. |
+| `tools` | `deny`: names or patterns, e.g. `web_search`, `mcp:files`, `mcp:*/delete_*` | The tools are taken away from the agent, even if its definition lists them. Denying `mcp:files` denies all of that server's tools. |
+| `models` | `allow`: names or patterns, e.g. `gpt-4.1-mini*` | Calls by agents using any other model are refused. |
+
+```powershell
+$policy = @{ name = "monthly-cap"; kind = "budget"; scope = "global"; rules = @{ limit_usd = 20; period = "month" } } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/v1/policies -ContentType "application/json" -Body $policy
+```
+
+Days and months start at 00:00 UTC (07:00 in Vietnam). Budgets are checked before each call
+from spend already recorded, so steps running in parallel can go a little past a limit.
+`POST /api/v1/policies/check` (the **Check an agent** box) shows what the policies would do to
+an agent's next call without running it. Every change to a policy or price is written to the
+audit log (`GET /api/v1/audit-logs`).
+
+| Method | Endpoint | What it does |
+| --- | --- | --- |
+| GET | `/api/v1/costs?days=30&agent=...&workflow=...` | Spend and tokens in total and by day, agent, model and workflow. |
+| GET / PUT | `/api/v1/model-prices` | List prices; add or change one (`model`, `input_per_mtok`, `output_per_mtok`). |
+| DELETE | `/api/v1/model-prices/{id}` | Remove a price. |
+| GET / POST | `/api/v1/policies` | List (budgets include current spend) or create. |
+| GET / PATCH / DELETE | `/api/v1/policies/{id}` | Read, change (for example `{"enabled": false}`) or delete. |
+| POST | `/api/v1/policies/check` | `{"agent": "<slug>", "workflow": "<name>"}`: dry run. |
+| GET | `/api/v1/audit-logs?resource_type=policy` | Who changed what, newest first. |
+
 ## Tests
 
 ```powershell
@@ -237,8 +289,9 @@ after they finish. Run a single API worker; a shared queue and worker pool come 
 app/
   main.py               FastAPI app factory, routers, lifespan
   api/health.py         /health and /health/ready
-  api/v1/               agents, workflows, runs, tasks, executions, runtimes, mcp-servers, tools
-  core/                 config (env settings), database (Base, engine, session), redis, security, permissions
+  api/v1/               agents, workflows, runs, tasks, executions, runtimes, mcp-servers, tools,
+                        memories, costs, model-prices, policies, audit-logs
+  core/                 config (env settings), database (Base, engine, session), redis, security
   models/               SQLAlchemy models (plan section 6)
   repositories/         data access
   registry/             agent and tool registry
@@ -246,6 +299,7 @@ app/
   runtimes/             AgentRuntime interface and adapters (plan section 9)
   tools/mcp.py          MCP server specs, tool grants, connecting and discovering tools
   memory/               memory store (PostgreSQL full-text search) and the agents' memory tools
+  policy/               model prices and costs, policy rules, the policy engine
   workflows/ observability/ schemas/   placeholders for later phases
 migrations/             Alembic (async); env.py imports app.models for autogenerate
 scripts/                seed_samples.py (load samples via the API), run_sample_workflow.py (in-process demo)

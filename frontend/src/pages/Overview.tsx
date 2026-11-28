@@ -3,11 +3,14 @@ import { api } from "../api/client";
 import { RunsTable } from "../components/RunsTable";
 import { Card, Empty, ErrorBox, Loading, PageHeader, Stat } from "../components/ui";
 import { useApi } from "../hooks/useApi";
+import { money } from "../lib/format";
 
 export function OverviewPage() {
   const agents = useApi(() => api.listAgents(), []);
   const workflows = useApi(() => api.listWorkflows(), []);
   const runs = useApi(() => api.listRuns({ limit: 50 }), [], 5000);
+  const costs = useApi(() => api.costs({ days: 30 }), [], 30000);
+  const policies = useApi(() => api.listPolicies(), [], 30000);
 
   const runItems = runs.data?.items ?? [];
   const active = runItems.filter((r) => r.status === "running" || r.status === "pending").length;
@@ -17,6 +20,7 @@ export function OverviewPage() {
     : "—";
   const workflowNames = new Set((workflows.data?.items ?? []).map((w) => w.name));
   const activeAgents = (agents.data?.items ?? []).filter((a) => a.status === "active").length;
+  const reachedBudgets = (policies.data?.items ?? []).filter((p) => p.enabled && p.status?.reached);
   const firstUse = agents.data && agents.data.items.length === 0;
 
   return (
@@ -41,7 +45,17 @@ export function OverviewPage() {
         <Stat label="Workflows" value={workflows.data ? workflowNames.size : "…"} hint={workflows.data ? `${workflows.data.items.length} versions` : undefined} />
         <Stat label="Running now" value={runs.data ? active : "…"} hint="background runs" />
         <Stat label="Success rate" value={successRate} hint={`last ${finished.length} finished runs`} />
+        <Stat
+          label="Spend, 30 days"
+          value={costs.data ? <Link to="/costs">{money(costs.data.total.cost_usd)}</Link> : "…"}
+          hint={costs.data ? `${costs.data.total.executions} agent calls` : undefined}
+        />
       </div>
+      {reachedBudgets.length > 0 && (
+        <div className="notice notice-warn">
+          Budget reached: {reachedBudgets.map((p) => p.name).join(", ")}. See <Link to="/policies">Policies</Link>.
+        </div>
+      )}
 
       {firstUse && (
         <Card title="Get started">

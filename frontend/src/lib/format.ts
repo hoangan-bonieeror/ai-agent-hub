@@ -49,3 +49,11 @@ export function splitList(text: string): string[] {
     .map((t) => t.trim())
     .filter(Boolean);
 }
+
+/** Dollars: cents for normal amounts, more digits for the tiny cost of one call. */
+export function money(n: number | null | undefined): string {
+  if (n == null) return "—";
+  if (n === 0) return "$0.00";
+  if (Math.abs(n) < 0.01) return `$${n.toFixed(4)}`;
+  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
