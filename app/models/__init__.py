@@ -3,6 +3,7 @@ for Alembic (migrations/env.py does `import app.models`)."""
 
 from app.models.agent import Agent, AgentVersion
 from app.models.audit_log import AuditLog
+from app.models.mcp_server import McpServer
 from app.models.tool import Tool
 from app.models.workflow import Execution, Task, Workflow, WorkflowRun
 
@@ -11,6 +12,7 @@ __all__ = [
     "AgentVersion",
     "AuditLog",
     "Execution",
+    "McpServer",
     "Task",
     "Tool",
     "Workflow",

@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     enable_fake_runtime: bool = False
     fake_runtime_delay_seconds: float = 1.0
 
+    # MCP servers with transport "stdio" start a local program on the API host.
+    # Off by default because the API has no login yet (Phase 4); turn it on for
+    # local development.
+    mcp_allow_stdio: bool = False
+
     # Built dashboard (`npm run build` in frontend/). When the folder exists the
     # API also serves the dashboard at "/". Relative paths are from the repo root.
     frontend_dist_dir: str = "frontend/dist"

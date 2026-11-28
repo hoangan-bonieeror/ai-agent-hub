@@ -6,7 +6,7 @@ Architecture and roadmap: see the project's *AI Agent Hub Architecture and Imple
 Built so far: Phase 1 (FastAPI, PostgreSQL, Agent Registry, runtime adapters, workflow API),
 Phase 2 (multi-agent workflows: dependencies, parallel steps, reviewer and aggregator
 steps, live progress over Server-Sent Events, run/task/execution status) and, from Phase 3,
-the web dashboard with a visual workflow builder.
+the web dashboard with a visual workflow builder and MCP tool servers.
 
 Commands below are for Windows PowerShell. On macOS/Linux use `source .venv/bin/activate`,
 `cp` instead of `Copy-Item`, and `export NAME=value` instead of `$env:NAME = "value"`.
@@ -72,6 +72,7 @@ A React + TypeScript app in `frontend/`. It needs [Node.js 22 LTS](https://nodej
 | Agents | List, search and filter agents; create and edit them (each change is a new version); see every version; enable, disable or archive; try an agent with a one-off task. |
 | Workflows | See each workflow as a graph; run it with JSON input; switch between versions. |
 | Workflow builder | Add agent, review and aggregate steps, connect them with "runs after", and watch the graph update. Mistakes (cycles, missing agents, unknown steps) are flagged before saving. A JSON tab edits the raw definition. Editing a workflow saves a new version. |
+| Tools | Add MCP servers, discover their tools, limit which tools agents may get. |
 | Runs | Filter by workflow and status. A run's page follows it live over SSE: each step's status on the graph, outputs, attempts, token usage, execution logs, the event log, and a Cancel button. |
 
 **One URL (after a build).** Build once, and `uvicorn` serves the dashboard at
@@ -99,6 +100,45 @@ Set `$env:HUB_API_URL = "http://localhost:9000"` first if the API is on another 
 The dashboard sends `X-Actor: dashboard` with its requests, so agent versions and runs it
 creates show "dashboard" as their author. There is no login yet (Phase 4: auth and RBAC), so
 do not expose port 8000 beyond your machine.
+
+## Tools and MCP servers
+
+Agents only get the tools named in their `tools` list; anything else is denied.
+
+| Name in `tools` | Grants |
+| --- | --- |
+| `web_search` | The built-in OpenAI web search tool. |
+| `mcp:<server>` | Every tool the MCP server allows. |
+| `mcp:<server>/<tool>` | One tool of that server. |
+
+Register an MCP server on the dashboard's **Tools** page (or `POST /api/v1/mcp-servers`), then
+press **Discover tools** (`POST /api/v1/mcp-servers/{name}/discover`) to load its tool list
+into the registry (`GET /api/v1/tools`). A server's `allowed_tools` caps what any agent can be
+granted. Each agent run connects to the servers it needs and disconnects when it ends.
+
+Servers that run as a local program (`stdio`) are off by default, because the API has no
+login yet and anyone who can reach it could make it start a program. For local use, set
+`MCP_ALLOW_STDIO=true` in `.env` and restart `uvicorn`. Example, the reference filesystem
+server sharing one folder (needs Node.js):
+
+```powershell
+$body = @{
+  name = "files"; transport = "stdio"; command = "npx.cmd"
+  args = @("-y", "@modelcontextprotocol/server-filesystem", "D:\shared-docs")
+  allowed_tools = @("read_text_file", "list_directory", "search_files")
+} | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/v1/mcp-servers `
+  -ContentType "application/json" -Body $body
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/v1/mcp-servers/files/discover
+```
+
+Then add `mcp:files` to an agent's tools. On Windows use `npx.cmd`, not `npx`. HTTP servers
+use `transport: "streamable_http"` (or `"sse"`) and a `url`.
+
+Secrets never go into a server's stored config. `env_from_host` lists names of environment
+variables the Hub passes to a stdio server (for example `["GITHUB_TOKEN"]`), and
+`headers_from_env` maps an HTTP header to the variable holding its value
+(`{"Authorization": "MCP_AUTH_HEADER"}`). Set those variables in `.env`.
 
 ## Tests
 
@@ -177,14 +217,15 @@ after they finish. Run a single API worker; a shared queue and worker pool come 
 app/
   main.py               FastAPI app factory, routers, lifespan
   api/health.py         /health and /health/ready
-  api/v1/               agents, workflows, runs, tasks, executions, runtimes (plan section 8)
+  api/v1/               agents, workflows, runs, tasks, executions, runtimes, mcp-servers, tools
   core/                 config (env settings), database (Base, engine, session), redis, security, permissions
   models/               SQLAlchemy models (plan section 6)
   repositories/         data access
   registry/             agent and tool registry
   orchestrator/         workflow graph, engine (parallel DAG), review, run recorder, SSE broker, runner
   runtimes/             AgentRuntime interface and adapters (plan section 9)
-  workflows/ memory/ tools/ observability/ schemas/   placeholders for later phases
+  tools/mcp.py          MCP server specs, tool grants, connecting and discovering tools
+  workflows/ memory/ observability/ schemas/   placeholders for later phases
 migrations/             Alembic (async); env.py imports app.models for autogenerate
 scripts/                seed_samples.py (load samples via the API), run_sample_workflow.py (in-process demo)
 tests/

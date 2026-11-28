@@ -195,3 +195,52 @@ export interface Readiness {
   postgres: string;
   redis: string;
 }
+
+export type McpTransport = "stdio" | "streamable_http" | "sse";
+
+export interface RegistryTool {
+  name: string;
+  description: string | null;
+  source: "builtin" | "mcp_server" | "mcp" | "registry";
+  server: string | null;
+  input_schema: Record<string, unknown> | null;
+  enabled: boolean;
+}
+
+export interface McpServerInput {
+  name?: string;
+  transport?: McpTransport;
+  description?: string | null;
+  command?: string | null;
+  args?: string[];
+  cwd?: string | null;
+  env_from_host?: string[];
+  url?: string | null;
+  headers_from_env?: Record<string, string>;
+  allowed_tools?: string[] | null;
+  timeout_seconds?: number;
+  enabled?: boolean;
+}
+
+export interface McpServerRow {
+  id: string;
+  name: string;
+  description: string | null;
+  transport: McpTransport;
+  config: {
+    command?: string;
+    args?: string[];
+    cwd?: string;
+    env_from_host?: string[];
+    url?: string;
+    headers_from_env?: Record<string, string>;
+    timeout_seconds?: number;
+  };
+  allowed_tools: string[] | null;
+  enabled: boolean;
+  grant: string;
+  tool_count: number;
+  tools?: RegistryTool[];
+  created_at: string;
+  updated_at: string;
+}
